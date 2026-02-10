@@ -1,0 +1,21 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <ItemGroup>
+    <CompilerVisibleProperty Include="CarpaNet_SourceGen_RootNamespace" />
+    <CompilerVisibleProperty Include="CarpaNet_SourceGen_EmitValidationAttributes" />
+    <CompilerVisibleProperty Include="CarpaNet_SourceGen_CborContextName" />
+    <CompilerVisibleProperty Include="CarpaNet_SourceGen_JsonContextName" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="IsATProtoLexicon" />
+  </ItemGroup>
+
+  <!-- Convert LexiconFiles items to AdditionalFiles with marker metadata -->
+  <Target Name="_CarpaNetMapLexiconFiles" BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun">
+    <ItemGroup>
+      <AdditionalFiles Include="@(LexiconFiles)" IsATProtoLexicon="true" />
+    </ItemGroup>
+  </Target>
+
+</Project>

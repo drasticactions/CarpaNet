@@ -1,0 +1,24 @@
+<Project>
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);SA1001;SA1208;SA0001;NU5104;NU1507</NoWarn>
+    <GitVersionTargetFramework>net8.0</GitVersionTargetFramework>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageIcon>favicon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Company>Drastic Actions</Company>
+    <Copyright>Copyright (C) Drastic Actions</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <DebugType>embedded</DebugType>
+    <IncludeSymbols>true</IncludeSymbols>
+  </PropertyGroup>
+
+  <ItemGroup Condition=" ('$(IsPackable)' == 'true') or ('$(PackAsTool)' == 'true') ">
+    <None Include="$(MSBuildThisFileDirectory)favicon.png" Pack="true" PackagePath=""
+      Visible="false" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CarpaNet.SourceGen/CarpaNet.SourceGen.csproj" />
+    <Project Path="src/CarpaNet/CarpaNet.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/AuthTest/AuthTest.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CarpaNet.UnitTests/CarpaNet.UnitTests.csproj" />
+  </Folder>
+</Solution>

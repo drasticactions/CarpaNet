@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0;netstandard2.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>12.0</LangVersion>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsAotCompatible Condition="'$(TargetFramework)' == 'netstandard2.0'"></IsAotCompatible>
+    <PackageId>CarpaNet</PackageId>
+    <Description>.NET ATProtocol Library. So good it'll make you Flippy your Fish.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Formats.Cbor" />
+    <PackageReference Include="System.Text.Json" />
+  </ItemGroup>
+
+  <ItemGroup Condition=" ('$(IsPackable)' == 'true') or ('$(PackAsTool)' == 'true') ">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath=""
+      Visible="false" />
+  </ItemGroup>
+
+  <Import Project="..\..\Version.props" />
+</Project>
