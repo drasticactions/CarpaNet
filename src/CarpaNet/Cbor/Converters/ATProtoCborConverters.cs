@@ -13,6 +13,13 @@ public sealed class ATCidCborConverter : CborTypeConverter<ATCid>
     {
         var state = reader.PeekState();
 
+        // Null CID (e.g. for deletion ops where CID is not present)
+        if (state == CborReaderState.Null)
+        {
+            reader.ReadNull();
+            return default;
+        }
+
         // CID can be represented as a Tag 42 link
         if (state == CborReaderState.Tag)
         {

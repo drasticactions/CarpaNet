@@ -144,7 +144,9 @@ public static class ObjectGenerator
         }
         else if (isRequired)
         {
-            sb.AppendLine($"public {required}{typeName.TrimEnd('?')} {csharpName} {{ get; set; }}");
+            // Properties that are both required and nullable keep the nullable type
+            var propTypeName = isNullable ? typeName : typeName.TrimEnd('?');
+            sb.AppendLine($"public {required}{propTypeName} {csharpName} {{ get; set; }}");
         }
         else
         {

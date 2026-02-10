@@ -523,7 +523,15 @@ public static class JsonContextGenerator
     private static bool IsNullableProperty(LexiconDefinition prop, LexiconDefinition parent, string propName)
     {
         var required = parent.Required ?? new List<string>();
+        var nullable = parent.Nullable ?? new List<string>();
         var isRequired = required.Contains(propName) || prop.IsRequired;
+
+        // A property can be both required (must be present) and nullable (value can be null)
+        if (nullable.Contains(propName))
+        {
+            return true;
+        }
+
         // ObjectGenerator strips nullability for required properties (TrimEnd('?')),
         // so we must match: required properties are NEVER nullable in the generated class.
         if (isRequired)

@@ -106,7 +106,7 @@ public static class CborContextGenerator
             var propType = GetPropertyCSharpType(prop.Value, currentNsid, registry, shortClassName, prop.Key, typeNamespace);
             var converterExpr = GetConverterExpression(prop.Value, currentNsid, registry, shortClassName, prop.Key, typeNamespace, sb, options, generatedTypes, qualifiedTypeName, classSuffix);
             var isRequired = requiredProps.Contains(prop.Key) || prop.Value.IsRequired;
-            var isNullable = !isRequired && IsNullableProperty(prop.Value, def, prop.Key);
+            var isNullable = IsNullableProperty(prop.Value, def, prop.Key);
             var isValueType = !IsReferenceType(propType);
 
             // Resolve property type for the CborPropertyInfo generic parameter

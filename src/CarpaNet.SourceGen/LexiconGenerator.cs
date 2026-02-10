@@ -456,8 +456,8 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         sb.AppendLine();
 
         var extensionsNs = string.IsNullOrEmpty(options.RootNamespace)
-            ? "CarpaNet.Extensions"
-            : $"{options.RootNamespace}.Extensions";
+            ? "CarpaNet"
+            : $"{options.RootNamespace}";
         sb.WriteNamespace(extensionsNs);
 
         sb.WriteSummary("Extension methods for ATProto API calls.");
@@ -1149,8 +1149,8 @@ public sealed class LexiconGenerator : IIncrementalGenerator
             : $"{options.RootNamespace}.Cbor";
 
         var factoryNs = string.IsNullOrEmpty(options.RootNamespace)
-            ? "CarpaNet.Extensions"
-            : $"{options.RootNamespace}.Extensions";
+            ? "CarpaNet"
+            : $"{options.RootNamespace}";
 
         sb.WriteNamespace(factoryNs);
 
