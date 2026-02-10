@@ -7,7 +7,6 @@ using AppBsky.Actor;
 using AppBsky.Feed;
 using AppBsky.Notification;
 using ComAtproto.Repo;
-using CarpaNet.Extensions;
 using CarpaNet.OAuth;
 using CarpaNet.OAuth.Storage;
 using CarpaNet;
