@@ -392,15 +392,11 @@ async Task CreatePostAsync(IATProtoClient client, string did)
         CreatedAt = DateTimeOffset.UtcNow
     };
 
-    // TODO: What is a better way to handle these?
-    var jsonOptions = ATProtoClientFactory.CreateJsonOptions();
-    var jsonElement = JsonSerializer.SerializeToElement(post, jsonOptions.GetTypeInfo(typeof(AppBsky.Feed.Post)));
-
     var input = new CreateRecordInput
     {
         Repo = new ATIdentifier(did),
         Collection = AppBsky.Feed.Post.RecordType,
-        Record = jsonElement
+        Record = post.ToJson()
     };
 
     var result = await client.ComAtprotoRepoCreateRecordAsync(input);

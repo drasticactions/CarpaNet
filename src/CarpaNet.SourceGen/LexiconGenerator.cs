@@ -185,10 +185,17 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         }
 
         // PHASE 6: Generate JSON serialization context
-        var jsonSource = GenerateJsonContextSource(byNamespace, registry, context, options);
+        var (jsonSource, concreteTypes) = GenerateJsonContextSource(byNamespace, registry, context, options);
         if (!string.IsNullOrEmpty(jsonSource))
         {
             context.AddSource($"{options.JsonContextName}.g.cs", SourceText.From(jsonSource, Encoding.UTF8));
+        }
+
+        // PHASE 6.5: Generate ToJson()/FromJson() serialization helper methods on concrete types
+        var serializationMethodsSource = GenerateSerializationMethodsSource(concreteTypes, options);
+        if (!string.IsNullOrEmpty(serializationMethodsSource))
+        {
+            context.AddSource("SerializationMethods.g.cs", SourceText.From(serializationMethodsSource, Encoding.UTF8));
         }
 
         // PHASE 7: Generate client factory class
@@ -659,7 +666,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
-    private static string GenerateJsonContextSource(
+    private static (string Source, HashSet<string> ConcreteTypes) GenerateJsonContextSource(
         Dictionary<string, List<(string Nsid, LexiconDocument Doc)>> byNamespace,
         TypeRegistry registry,
         SourceProductionContext context,
@@ -673,6 +680,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         var generatedTypes = new HashSet<string>();
         var collectedPropertyTypes = new HashSet<string>();
         var nestedTypeDispatch = new List<(string FullTypeName, string MethodSuffix)>();
+        var concreteTypes = new HashSet<string>();
 
         // Collect all type dispatch entries: (fullCSharpTypeName, methodSuffix)
         var typeDispatch = new List<(string FullTypeName, string MethodSuffix)>();
@@ -689,6 +697,19 @@ public sealed class LexiconGenerator : IIncrementalGenerator
 
         sb.WriteSummary("Gets the default singleton instance.");
         sb.AppendLine($"public static {options.JsonContextName} Default {{ get; }} = new {options.JsonContextName}();");
+        sb.AppendLine();
+
+        // Default options for use by serialization helper methods
+        sb.AppendLine("private static readonly global::System.Text.Json.JsonSerializerOptions s_defaultOptions = new global::System.Text.Json.JsonSerializerOptions");
+        sb.OpenBrace();
+        sb.AppendLine("PropertyNamingPolicy = global::System.Text.Json.JsonNamingPolicy.CamelCase,");
+        sb.AppendLine("DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,");
+        sb.AppendLine($"TypeInfoResolver = Default,");
+        sb.CloseBrace(withSemicolon: true);
+        sb.AppendLine();
+
+        sb.WriteSummary("Gets the default JsonSerializerOptions configured with the generated JSON type info resolver.");
+        sb.AppendLine("public static global::System.Text.Json.JsonSerializerOptions DefaultOptions => s_defaultOptions;");
         sb.AppendLine();
 
         // Iterate all namespaces and types to generate factory methods
@@ -715,7 +736,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                             {
                                 var fullName = $"{ns}.{className}";
                                 var suffix = JsonContextGenerator.ToMethodSuffix(fullName);
-                                JsonContextGenerator.GenerateJsonTypeInfo(sb, fullName, suffix, defValue.Record, nsid, registry, options, isRecord: true, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch);
+                                JsonContextGenerator.GenerateJsonTypeInfo(sb, fullName, suffix, defValue.Record, nsid, registry, options, isRecord: true, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch, concreteTypes: concreteTypes);
                                 typeDispatch.Add((fullName, suffix));
                             }
                             break;
@@ -724,7 +745,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                         {
                             var fullName = $"{ns}.{className}";
                             var suffix = JsonContextGenerator.ToMethodSuffix(fullName);
-                            JsonContextGenerator.GenerateJsonTypeInfo(sb, fullName, suffix, defValue, nsid, registry, options, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch);
+                            JsonContextGenerator.GenerateJsonTypeInfo(sb, fullName, suffix, defValue, nsid, registry, options, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch, concreteTypes: concreteTypes);
                             typeDispatch.Add((fullName, suffix));
                             break;
                         }
@@ -746,7 +767,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                                 var outputClassName = className + "Output";
                                 var fullName = $"{ns}.{outputClassName}";
                                 var suffix = JsonContextGenerator.ToMethodSuffix(fullName);
-                                JsonContextGenerator.GenerateJsonTypeInfo(sb, fullName, suffix, defValue.Output.Schema, nsid, registry, options, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch);
+                                JsonContextGenerator.GenerateJsonTypeInfo(sb, fullName, suffix, defValue.Output.Schema, nsid, registry, options, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch, concreteTypes: concreteTypes);
                                 typeDispatch.Add((fullName, suffix));
                             }
                             break;
@@ -757,7 +778,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                                 var inputClassName = className + "Input";
                                 var fullName = $"{ns}.{inputClassName}";
                                 var suffix = JsonContextGenerator.ToMethodSuffix(fullName);
-                                JsonContextGenerator.GenerateJsonTypeInfo(sb, fullName, suffix, defValue.Input.Schema, nsid, registry, options, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch);
+                                JsonContextGenerator.GenerateJsonTypeInfo(sb, fullName, suffix, defValue.Input.Schema, nsid, registry, options, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch, concreteTypes: concreteTypes);
                                 typeDispatch.Add((fullName, suffix));
                             }
                             if (defValue.Output?.Schema != null && !ApiGenerator.IsOutputRef(defValue))
@@ -765,7 +786,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                                 var outputClassName = className + "Output";
                                 var fullName = $"{ns}.{outputClassName}";
                                 var suffix = JsonContextGenerator.ToMethodSuffix(fullName);
-                                JsonContextGenerator.GenerateJsonTypeInfo(sb, fullName, suffix, defValue.Output.Schema, nsid, registry, options, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch);
+                                JsonContextGenerator.GenerateJsonTypeInfo(sb, fullName, suffix, defValue.Output.Schema, nsid, registry, options, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch, concreteTypes: concreteTypes);
                                 typeDispatch.Add((fullName, suffix));
                             }
                             break;
@@ -824,6 +845,89 @@ public sealed class LexiconGenerator : IIncrementalGenerator
 
         sb.CloseBrace(); // class
         sb.AppendLine();
+        sb.AppendLine("#endif");
+
+        return (sb.ToString(), concreteTypes);
+    }
+
+    private static string GenerateSerializationMethodsSource(
+        HashSet<string> concreteTypes,
+        GeneratorOptions options)
+    {
+        if (concreteTypes.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var contextNs = string.IsNullOrEmpty(options.RootNamespace)
+            ? "CarpaNet.Json"
+            : $"{options.RootNamespace}.Json";
+
+        var sb = new SourceBuilder();
+        sb.WriteHeader();
+        sb.AppendLine("#if NET8_0_OR_GREATER");
+        sb.AppendLine();
+
+        // Group types by namespace
+        var byNamespace = concreteTypes
+            .OrderBy(t => t)
+            .GroupBy(t => t.Contains(".")
+                ? t.Substring(0, t.LastIndexOf('.'))
+                : "");
+
+        foreach (var nsGroup in byNamespace)
+        {
+            var ns = nsGroup.Key;
+            if (!string.IsNullOrEmpty(ns))
+            {
+                sb.WriteNamespaceBlock(ns);
+            }
+
+            foreach (var fullTypeName in nsGroup)
+            {
+                var shortName = fullTypeName.Contains(".")
+                    ? fullTypeName.Substring(fullTypeName.LastIndexOf('.') + 1)
+                    : fullTypeName;
+
+                sb.AppendLine($"partial class {shortName}");
+                sb.OpenBrace();
+
+                // ToJson()
+                sb.WriteSummary("Serializes this instance to a <see cref=\"global::System.Text.Json.JsonElement\"/>.");
+                sb.AppendLine("public global::System.Text.Json.JsonElement ToJson()");
+                sb.OpenBrace();
+                sb.AppendLine("return global::System.Text.Json.JsonSerializer.SerializeToElement(");
+                sb.Indent();
+                sb.AppendLine("this,");
+                sb.AppendLine($"(global::System.Text.Json.Serialization.Metadata.JsonTypeInfo<{shortName}>)");
+                sb.AppendLine($"    global::{contextNs}.{options.JsonContextName}.DefaultOptions.GetTypeInfo(typeof({shortName}))!);");
+                sb.Unindent();
+                sb.CloseBrace();
+                sb.AppendLine();
+
+                // FromJson()
+                sb.WriteSummary("Deserializes a <see cref=\"global::System.Text.Json.JsonElement\"/> to an instance of this type.");
+                sb.AppendLine($"public static {shortName}? FromJson(global::System.Text.Json.JsonElement element)");
+                sb.OpenBrace();
+                sb.AppendLine($"return global::System.Text.Json.JsonSerializer.Deserialize(");
+                sb.Indent();
+                sb.AppendLine("element,");
+                sb.AppendLine($"(global::System.Text.Json.Serialization.Metadata.JsonTypeInfo<{shortName}>)");
+                sb.AppendLine($"    global::{contextNs}.{options.JsonContextName}.DefaultOptions.GetTypeInfo(typeof({shortName}))!);");
+                sb.Unindent();
+                sb.CloseBrace();
+
+                sb.CloseBrace(); // partial class
+                sb.AppendLine();
+            }
+
+            if (!string.IsNullOrEmpty(ns))
+            {
+                sb.CloseBrace(); // namespace
+                sb.AppendLine();
+            }
+        }
+
         sb.AppendLine("#endif");
 
         return sb.ToString();
@@ -1067,12 +1171,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         sb.WriteSummary("Creates JsonSerializerOptions configured with the generated JSON type info resolver.");
         sb.AppendLine("public static JsonSerializerOptions CreateJsonOptions()");
         sb.OpenBrace();
-        sb.AppendLine("return new JsonSerializerOptions");
-        sb.OpenBrace();
-        sb.AppendLine("PropertyNamingPolicy = JsonNamingPolicy.CamelCase,");
-        sb.AppendLine("DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,");
-        sb.AppendLine($"TypeInfoResolver = global::{jsonContextNs}.{options.JsonContextName}.Default,");
-        sb.CloseBrace(withSemicolon: true);
+        sb.AppendLine($"return global::{jsonContextNs}.{options.JsonContextName}.DefaultOptions;");
         sb.CloseBrace();
         sb.AppendLine();
 

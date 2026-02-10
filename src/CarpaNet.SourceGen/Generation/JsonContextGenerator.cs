@@ -36,7 +36,8 @@ public static class JsonContextGenerator
         bool isRecord = false,
         HashSet<string>? generatedTypes = null,
         HashSet<string>? collectedPropertyTypes = null,
-        List<(string FullTypeName, string MethodSuffix)>? nestedTypeDispatch = null)
+        List<(string FullTypeName, string MethodSuffix)>? nestedTypeDispatch = null,
+        HashSet<string>? concreteTypes = null)
     {
         generatedTypes ??= new HashSet<string>();
 
@@ -44,6 +45,9 @@ public static class JsonContextGenerator
         {
             return;
         }
+
+        // Track this as a concrete type for serialization method generation
+        concreteTypes?.Add(qualifiedTypeName);
 
         // Track this type for dispatch
         nestedTypeDispatch?.Add((qualifiedTypeName, methodSuffix));
@@ -54,7 +58,7 @@ public static class JsonContextGenerator
         // Generate nested type infos for inline objects/unions in properties
         foreach (var prop in properties)
         {
-            GenerateNestedTypeInfosForProperty(sb, qualifiedTypeName, methodSuffix, prop.Key, prop.Value, currentNsid, registry, options, generatedTypes, collectedPropertyTypes, nestedTypeDispatch);
+            GenerateNestedTypeInfosForProperty(sb, qualifiedTypeName, methodSuffix, prop.Key, prop.Value, currentNsid, registry, options, generatedTypes, collectedPropertyTypes, nestedTypeDispatch, concreteTypes);
         }
 
         // Generate the Create method using JsonMetadataServices.CreateObjectInfo (AOT-compatible, no RequiresDynamicCode)
@@ -313,7 +317,8 @@ public static class JsonContextGenerator
         GeneratorOptions options,
         HashSet<string> generatedTypes,
         HashSet<string>? collectedPropertyTypes = null,
-        List<(string FullTypeName, string MethodSuffix)>? nestedTypeDispatch = null)
+        List<(string FullTypeName, string MethodSuffix)>? nestedTypeDispatch = null,
+        HashSet<string>? concreteTypes = null)
     {
         // Handle inline objects
         if (prop.Type == "object" && prop.Properties != null && prop.Properties.Count > 0)
@@ -321,7 +326,7 @@ public static class JsonContextGenerator
             var pascalProp = NsidHelper.ToPascalCase(propertyName);
             var nestedQualified = $"{parentQualifiedTypeName}{pascalProp}";
             var nestedSuffix = $"{parentMethodSuffix}_{pascalProp}";
-            GenerateJsonTypeInfo(sb, nestedQualified, nestedSuffix, prop, currentNsid, registry, options, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch);
+            GenerateJsonTypeInfo(sb, nestedQualified, nestedSuffix, prop, currentNsid, registry, options, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch, concreteTypes: concreteTypes);
         }
 
         // Handle unions
@@ -349,7 +354,7 @@ public static class JsonContextGenerator
                 var pascalProp = NsidHelper.ToPascalCase(propertyName);
                 var nestedQualified = $"{parentQualifiedTypeName}{pascalProp}Item";
                 var nestedSuffix = $"{parentMethodSuffix}_{pascalProp}Item";
-                GenerateJsonTypeInfo(sb, nestedQualified, nestedSuffix, prop.Items, currentNsid, registry, options, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch);
+                GenerateJsonTypeInfo(sb, nestedQualified, nestedSuffix, prop.Items, currentNsid, registry, options, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch, concreteTypes: concreteTypes);
             }
 
             if (prop.Items.Type == "union" && prop.Items.Refs != null)
