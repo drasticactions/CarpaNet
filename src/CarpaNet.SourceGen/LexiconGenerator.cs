@@ -674,8 +674,6 @@ public sealed class LexiconGenerator : IIncrementalGenerator
     {
         var sb = new SourceBuilder();
         sb.WriteHeader();
-        sb.AppendLine("#if NET8_0_OR_GREATER");
-        sb.AppendLine();
 
         var generatedTypes = new HashSet<string>();
         var collectedPropertyTypes = new HashSet<string>();
@@ -845,7 +843,6 @@ public sealed class LexiconGenerator : IIncrementalGenerator
 
         sb.CloseBrace(); // class
         sb.AppendLine();
-        sb.AppendLine("#endif");
 
         return (sb.ToString(), concreteTypes);
     }
@@ -865,8 +862,6 @@ public sealed class LexiconGenerator : IIncrementalGenerator
 
         var sb = new SourceBuilder();
         sb.WriteHeader();
-        sb.AppendLine("#if NET8_0_OR_GREATER");
-        sb.AppendLine();
 
         // Group types by namespace
         var byNamespace = concreteTypes
@@ -927,8 +922,6 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                 sb.AppendLine();
             }
         }
-
-        sb.AppendLine("#endif");
 
         return sb.ToString();
     }
@@ -1134,8 +1127,6 @@ public sealed class LexiconGenerator : IIncrementalGenerator
     {
         var sb = new SourceBuilder();
         sb.WriteHeader();
-        sb.AppendLine("#if NET8_0_OR_GREATER");
-        sb.AppendLine();
         sb.WriteUsing("System");
         sb.WriteUsing("System.Collections.Generic");
         sb.WriteUsing("System.Net.Http");
@@ -1246,7 +1237,6 @@ public sealed class LexiconGenerator : IIncrementalGenerator
 
         sb.CloseBrace(); // class
         sb.AppendLine();
-        sb.AppendLine("#endif");
 
         return sb.ToString();
     }

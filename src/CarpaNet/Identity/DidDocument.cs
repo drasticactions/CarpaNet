@@ -116,13 +116,8 @@ public sealed class DidDocument
     /// </summary>
     public static DidDocument FromJson(string json)
     {
-#if NET8_0_OR_GREATER
         return JsonSerializer.Deserialize(json, DidDocumentJsonContext.Default.DidDocument)
             ?? throw new InvalidOperationException("Failed to parse DID document");
-#else
-        return JsonSerializer.Deserialize<DidDocument>(json, JsonOptions)
-            ?? throw new InvalidOperationException("Failed to parse DID document");
-#endif
     }
 
     /// <summary>
@@ -130,20 +125,8 @@ public sealed class DidDocument
     /// </summary>
     public string ToJson()
     {
-#if NET8_0_OR_GREATER
         return JsonSerializer.Serialize(this, DidDocumentJsonContext.Default.DidDocument);
-#else
-        return JsonSerializer.Serialize(this, JsonOptions);
-#endif
     }
-
-#if !NET8_0_OR_GREATER
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-#endif
 }
 
 /// <summary>

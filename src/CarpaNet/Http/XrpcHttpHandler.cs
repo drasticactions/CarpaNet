@@ -5,9 +5,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-#if NET8_0_OR_GREATER
 using System.Text.Json.Serialization.Metadata;
-#endif
 using System.Threading;
 using System.Threading.Tasks;
 using CarpaNet.Xrpc;
@@ -119,12 +117,8 @@ internal static class XrpcHttpHandler
 
         if (input != null)
         {
-#if NET8_0_OR_GREATER
             var typeInfo = (JsonTypeInfo<TInput>)jsonOptions.GetTypeInfo(typeof(TInput));
             var json = JsonSerializer.Serialize(input, typeInfo);
-#else
-            var json = JsonSerializer.Serialize(input, jsonOptions);
-#endif
             request.Content = new StringContent(json, Encoding.UTF8, ContentTypeJson);
         }
 
@@ -183,7 +177,8 @@ internal static class XrpcHttpHandler
         var result = await JsonSerializer.DeserializeAsync(content, typeInfo, cancellationToken).ConfigureAwait(false);
 #else
         var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-        var result = JsonSerializer.Deserialize<TOutput>(content, jsonOptions);
+        var typeInfo = (JsonTypeInfo<TOutput>)jsonOptions.GetTypeInfo(typeof(TOutput));
+        var result = JsonSerializer.Deserialize<TOutput>(content, typeInfo);
 #endif
 
         if (result == null)

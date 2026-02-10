@@ -2,9 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text.Json;
-#if NET8_0_OR_GREATER
 using System.Text.Json.Serialization.Metadata;
-#endif
 using System.Threading;
 using System.Threading.Tasks;
 using CarpaNet;
@@ -124,12 +122,8 @@ public sealed class OAuthSession : IATProtoClient, IDisposable
 
         if (input != null)
         {
-#if NET8_0_OR_GREATER
             var typeInfo = (JsonTypeInfo<TInput>)_jsonOptions.GetTypeInfo(typeof(TInput));
             var json = JsonSerializer.Serialize(input, typeInfo);
-#else
-            var json = JsonSerializer.Serialize(input, _jsonOptions);
-#endif
             request.Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
         }
 
@@ -152,12 +146,8 @@ public sealed class OAuthSession : IATProtoClient, IDisposable
 
         if (input != null)
         {
-#if NET8_0_OR_GREATER
             var typeInfo = (JsonTypeInfo<TInput>)_jsonOptions.GetTypeInfo(typeof(TInput));
             var json = JsonSerializer.Serialize(input, typeInfo);
-#else
-            var json = JsonSerializer.Serialize(input, _jsonOptions);
-#endif
             request.Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
         }
 
@@ -281,7 +271,8 @@ public sealed class OAuthSession : IATProtoClient, IDisposable
         var result = await JsonSerializer.DeserializeAsync(content, typeInfo, cancellationToken).ConfigureAwait(false);
 #else
         var contentString = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-        var result = JsonSerializer.Deserialize<TOutput>(contentString, _jsonOptions);
+        var typeInfo = (JsonTypeInfo<TOutput>)_jsonOptions.GetTypeInfo(typeof(TOutput));
+        var result = JsonSerializer.Deserialize<TOutput>(contentString, typeInfo);
 #endif
 
         if (result == null)
