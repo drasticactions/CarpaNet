@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using AppBsky.Actor;
 using AppBsky.Feed;
 using AppBsky.Notification;
+using ComAtproto.Repo;
 using CarpaNet.Extensions;
 using CarpaNet.OAuth;
 using CarpaNet.OAuth.Storage;
@@ -269,9 +270,11 @@ async Task AuthenticatedMenuAsync(IATProtoClient client, string? handle, string 
         Console.WriteLine("  2. Get my preferences");
         Console.WriteLine("  3. Get my timeline");
         Console.WriteLine("  4. Get notifications");
-        Console.WriteLine("  5. Save session");
-        Console.WriteLine("  6. Show session tokens");
-        Console.WriteLine("  7. Exit");
+        Console.WriteLine("  5. Create a post");
+        Console.WriteLine("  6. Delete a post");
+        Console.WriteLine("  7. Save session");
+        Console.WriteLine("  8. Show session tokens");
+        Console.WriteLine("  9. Exit");
         Console.Write("> ");
 
         var choice = Console.ReadLine()?.Trim();
@@ -293,12 +296,18 @@ async Task AuthenticatedMenuAsync(IATProtoClient client, string? handle, string 
                     await GetNotificationsAsync(client);
                     break;
                 case "5":
-                    SaveCurrentSession(client, handle, did);
+                    await CreatePostAsync(client, did);
                     break;
                 case "6":
-                    await ShowSessionTokensAsync(client);
+                    await DeletePostAsync(client, did);
                     break;
                 case "7":
+                    SaveCurrentSession(client, handle, did);
+                    break;
+                case "8":
+                    await ShowSessionTokensAsync(client);
+                    break;
+                case "9":
                     return;
                 default:
                     Console.WriteLine("Invalid choice.");
@@ -365,6 +374,67 @@ async Task GetNotificationsAsync(IATProtoClient client)
             Console.WriteLine($"  - [{notif.Reason}] from @{notif.Author?.Handle}");
         }
     }
+}
+
+async Task CreatePostAsync(IATProtoClient client, string did)
+{
+    Console.Write("Post text: ");
+    var text = Console.ReadLine();
+    if (string.IsNullOrWhiteSpace(text))
+    {
+        Console.WriteLine("Post text cannot be empty.");
+        return;
+    }
+
+    var post = new AppBsky.Feed.Post
+    {
+        Text = text,
+        CreatedAt = DateTimeOffset.UtcNow
+    };
+
+    // TODO: What is a better way to handle these?
+    var jsonOptions = ATProtoClientFactory.CreateJsonOptions();
+    var jsonElement = JsonSerializer.SerializeToElement(post, jsonOptions.GetTypeInfo(typeof(AppBsky.Feed.Post)));
+
+    var input = new CreateRecordInput
+    {
+        Repo = new ATIdentifier(did),
+        Collection = AppBsky.Feed.Post.RecordType,
+        Record = jsonElement
+    };
+
+    var result = await client.ComAtprotoRepoCreateRecordAsync(input);
+    Console.WriteLine($"  Post created!");
+    Console.WriteLine($"  URI: {result.Uri}");
+    Console.WriteLine($"  CID: {result.Cid}");
+}
+
+async Task DeletePostAsync(IATProtoClient client, string did)
+{
+    Console.Write("AT URI of post to delete: ");
+    var uriString = Console.ReadLine()?.Trim();
+    if (string.IsNullOrWhiteSpace(uriString))
+    {
+        Console.WriteLine("URI cannot be empty.");
+        return;
+    }
+
+    var atUri = new ATUri(uriString);
+    if (!atUri.IsValid || string.IsNullOrEmpty(atUri.RecordKey))
+    {
+        Console.WriteLine("Invalid AT URI.");
+        return;
+    }
+
+    var input = new DeleteRecordInput
+    {
+        Repo = new ATIdentifier(did),
+        Collection = AppBsky.Feed.Post.RecordType,
+        Rkey = atUri.RecordKey
+    };
+
+    await client.ComAtprotoRepoDeleteRecordAsync(input);
+    Console.WriteLine("  Post deleted.");
 }
 
 async Task ShowSessionTokensAsync(IATProtoClient client)

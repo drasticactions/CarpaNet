@@ -9,6 +9,7 @@
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
     <CarpaNet_EmitValidationAttributes>true</CarpaNet_EmitValidationAttributes>
     <CarpaNet_JsonContextName>ATProtoJsonContext</CarpaNet_JsonContextName>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
   </PropertyGroup>
 
   <ItemGroup>

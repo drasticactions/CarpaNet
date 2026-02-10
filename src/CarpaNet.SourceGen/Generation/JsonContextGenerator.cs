@@ -68,14 +68,6 @@ public static class JsonContextGenerator
         sb.CloseBrace(withSemicolon: true);
         sb.AppendLine($"var info = global::System.Text.Json.Serialization.Metadata.JsonMetadataServices.CreateObjectInfo<global::{qualifiedTypeName}>(options, objectInfo);");
 
-        // For records, add polymorphism options with $type
-        if (isRecord)
-        {
-            sb.AppendLine($"var polyOptions = new global::System.Text.Json.Serialization.Metadata.JsonPolymorphismOptions();");
-            sb.AppendLine("polyOptions.TypeDiscriminatorPropertyName = \"$type\";");
-            sb.AppendLine("info.PolymorphismOptions = polyOptions;");
-        }
-
         sb.AppendLine("return info;");
         sb.CloseBrace();
         sb.AppendLine();
