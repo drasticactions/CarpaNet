@@ -20,3 +20,8 @@ With that, the goals of CarpaNet are to:
 - Maintain NativeAOT compatibility. No exceptions.
 - Reduce complexity and avoid "clever" SDK methods; keep it simple. Leave the hard stuff to the source generator. You shouldn't need to learn new concepts to use this.
 - Keep it ATProtocol, and don't turn this into a Bluesky-specific library. The core CarpaNet library should not include helper methods specific to using Bluesky - The social network. It should stick to making it easier to interoperate with ATProtocol.
+
+### Third-Party Libraries
+
+- [GitVersion](https://github.com/GitTools/GitVersion)
+- [ZstdSharp.Port](https://github.com/oleg-st/ZstdSharp)

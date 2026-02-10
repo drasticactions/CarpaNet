@@ -50,4 +50,24 @@ public static class BlueskyServices
     /// Bluesky Ozone service DID for proxy header.
     /// </summary>
     public const string OzoneServiceDid = "did:plc:ar7c4by46qjdydhdevvrndac#atproto_labeler";
+
+    /// <summary>
+    /// Bluesky Jetstream instance 1, US-East.
+    /// </summary>
+    public const string Jetstream1UsEast = "https://jetstream1.us-east.bsky.network";
+
+    /// <summary>
+    /// Bluesky Jetstream instance 2, US-East.
+    /// </summary>
+    public const string Jetstream2UsEast = "https://jetstream2.us-east.bsky.network";
+
+    /// <summary>
+    /// Bluesky Jetstream instance 1, US-West.
+    /// </summary>
+    public const string Jetstream1UsWest = "https://jetstream1.us-west.bsky.network";
+
+    /// <summary>
+    /// Bluesky Jetstream instance 2, US-West.
+    /// </summary>
+    public const string Jetstream2UsWest = "https://jetstream2.us-west.bsky.network";
 }

@@ -4,7 +4,7 @@
     <TargetFrameworks>net8.0;net9.0;net10.0;netstandard2.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <LangVersion>12.0</LangVersion>
+    <LangVersion>latest</LangVersion>
     <IsAotCompatible>true</IsAotCompatible>
     <IsAotCompatible Condition="'$(TargetFramework)' == 'netstandard2.0'"></IsAotCompatible>
     <PackageId>CarpaNet</PackageId>
@@ -14,6 +14,7 @@
   <ItemGroup>
     <PackageReference Include="System.Formats.Cbor" />
     <PackageReference Include="System.Text.Json" />
+    <PackageReference Include="ZstdSharp.Port" />
   </ItemGroup>
 
   <ItemGroup Condition=" ('$(IsPackable)' == 'true') or ('$(PackAsTool)' == 'true') ">

@@ -12,5 +12,6 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2"/>
     <PackageVersion Include="coverlet.collector" Version="6.0.4"/>
     <PackageVersion Include="GitVersion.MSBuild" Version="6.5.1" />
+    <PackageVersion Include="ZstdSharp.Port" Version="0.8.7" />
   </ItemGroup>
 </Project>
