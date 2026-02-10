@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace CarpaNet.Auth;
 
 /// <summary>
-/// JSON serialization context for session types (AOT-compatible).
+/// JSON serialization context for session types.
 /// </summary>
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,

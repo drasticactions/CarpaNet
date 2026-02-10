@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace CarpaNet.Blob;
 
 /// <summary>
-/// AOT-compatible JSON serialization context for blob types.
+/// JSON serialization context for blob types.
 /// </summary>
 [JsonSerializable(typeof(BlobRef))]
 [JsonSerializable(typeof(BlobLink))]

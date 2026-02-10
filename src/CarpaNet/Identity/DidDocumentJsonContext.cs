@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace CarpaNet.Identity;
 
 /// <summary>
-/// JSON serialization context for DID document types (AOT-compatible).
+/// JSON serialization context for DID document types.
 /// </summary>
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,

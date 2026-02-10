@@ -5,6 +5,7 @@
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/AuthTest/AuthTest.csproj" />
+    <Project Path="samples/FirehoseTest/FirehoseTest.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CarpaNet.UnitTests/CarpaNet.UnitTests.csproj" />

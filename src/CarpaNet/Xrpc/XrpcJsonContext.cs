@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace CarpaNet.Xrpc;
 
 /// <summary>
-/// JSON serialization context for XRPC types (AOT-compatible).
+/// JSON serialization context for XRPC types.
 /// </summary>
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,

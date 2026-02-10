@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace CarpaNet.Cbor;
 
 /// <summary>
-/// Non-generic interface for type-erased operations (AOT-compatible).
+/// Non-generic interface for type-erased operations.
 /// </summary>
 public interface ICborTypeInfo
 {
@@ -40,7 +40,7 @@ public interface ICborTypeInfo
 }
 
 /// <summary>
-/// Provides metadata for serializing and deserializing a type to/from DAG-CBOR (AOT-compatible).
+/// Provides metadata for serializing and deserializing a type to/from DAG-CBOR.
 /// </summary>
 /// <typeparam name="T">The type this info describes.</typeparam>
 public abstract class CborTypeInfo<T> : ICborTypeInfo

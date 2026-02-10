@@ -12,7 +12,7 @@ namespace CarpaNet.EventStream;
 
 /// <summary>
 /// WebSocket client for ATProtocol event streams (firehose).
-/// AOT-compatible - requires a CborSerializerContext with registered types.
+/// - requires a CborSerializerContext with registered types.
 /// </summary>
 public sealed class EventStreamClient : IDisposable
 {

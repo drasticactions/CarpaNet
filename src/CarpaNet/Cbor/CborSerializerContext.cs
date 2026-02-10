@@ -5,7 +5,7 @@ using CarpaNet.Cbor.Converters;
 namespace CarpaNet.Cbor;
 
 /// <summary>
-/// Abstract base class for AOT-compatible CBOR serialization contexts.
+/// Abstract base class for CBOR serialization contexts.
 /// Derived classes should be source-generated to provide type info for all serializable types.
 /// </summary>
 public abstract class CborSerializerContext

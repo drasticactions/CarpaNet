@@ -3,7 +3,7 @@ using System;
 namespace CarpaNet.Cbor;
 
 /// <summary>
-/// Interface for type-specific CBOR converters (AOT-compatible).
+/// Interface for type-specific CBOR converters.
 /// </summary>
 public interface ICborTypeConverter
 {
@@ -36,7 +36,7 @@ public interface ICborTypeConverter
 }
 
 /// <summary>
-/// Generic interface for type-specific CBOR converters (AOT-compatible).
+/// Generic interface for type-specific CBOR converters.
 /// </summary>
 /// <typeparam name="T">The type this converter handles.</typeparam>
 public interface ICborTypeConverter<T> : ICborTypeConverter
@@ -57,7 +57,7 @@ public interface ICborTypeConverter<T> : ICborTypeConverter
 }
 
 /// <summary>
-/// Base class for type-specific CBOR converters (AOT-compatible).
+/// Base class for type-specific CBOR converters.
 /// </summary>
 /// <typeparam name="T">The type this converter handles.</typeparam>
 public abstract class CborTypeConverter<T> : ICborTypeConverter<T>

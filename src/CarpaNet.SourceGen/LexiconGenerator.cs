@@ -638,7 +638,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         }
 
         // Generate the context class
-        sb.WriteSummary("AOT-compatible CBOR serialization context for all AT Protocol types.");
+        sb.WriteSummary("CBOR serialization context for all AT Protocol types.");
         sb.AppendLine($"public partial class {options.CborContextName} : CarpaNet.Cbor.CborSerializerContext");
         sb.OpenBrace();
 
@@ -689,7 +689,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
 
         sb.WriteNamespace(contextNs);
 
-        sb.WriteSummary("AOT-compatible JSON serialization context implementing IJsonTypeInfoResolver for all AT Protocol types.");
+        sb.WriteSummary("JSON serialization context implementing IJsonTypeInfoResolver for all AT Protocol types.");
         sb.AppendLine($"public sealed class {options.JsonContextName} : global::System.Text.Json.Serialization.Metadata.IJsonTypeInfoResolver");
         sb.OpenBrace();
 

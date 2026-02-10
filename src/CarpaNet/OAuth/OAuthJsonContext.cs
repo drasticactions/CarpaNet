@@ -4,7 +4,7 @@ using CarpaNet.OAuth.Crypto;
 namespace CarpaNet.OAuth;
 
 /// <summary>
-/// AOT-compatible JSON serialization context for OAuth types.
+/// JSON serialization context for OAuth types.
 /// </summary>
 [JsonSerializable(typeof(OAuthAuthorizationServerMetadata))]
 [JsonSerializable(typeof(OAuthTokenResponse))]

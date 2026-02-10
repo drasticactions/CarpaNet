@@ -3,7 +3,7 @@ using System;
 namespace CarpaNet.Cbor;
 
 /// <summary>
-/// AOT-compatible DAG-CBOR serializer and deserializer.
+/// DAG-CBOR serializer and deserializer.
 /// Uses CborSerializerContext for type resolution without reflection.
 /// </summary>
 public sealed class DagCborSerializer

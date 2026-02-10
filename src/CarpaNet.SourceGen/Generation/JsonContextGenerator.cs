@@ -9,7 +9,7 @@ using CarpaNet.Utilities;
 namespace CarpaNet.Generation;
 
 /// <summary>
-/// Generates AOT-compatible JSON serialization context (IJsonTypeInfoResolver) using JsonMetadataServices.
+/// Generates JSON serialization context (IJsonTypeInfoResolver) using JsonMetadataServices.
 /// </summary>
 public static class JsonContextGenerator
 {

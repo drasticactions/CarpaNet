@@ -7,7 +7,7 @@ using CarpaNet.Utilities;
 namespace CarpaNet.Generation;
 
 /// <summary>
-/// Generates AOT-compatible CBOR serialization context and type info classes.
+/// Generates CBOR serialization context and type info classes.
 /// Follows the same structural pattern as JsonContextGenerator: all CborTypeInfo classes
 /// are emitted into a single namespace with encoded class names (e.g., AppBsky_Actor_DefsProfileViewBasicCborTypeInfo).
 /// </summary>
@@ -68,7 +68,7 @@ public static class CborContextGenerator
 
         var globalType = ResolveToGlobalType(qualifiedTypeName);
 
-        sb.WriteSummary($"AOT-compatible CBOR type info for {shortClassName}.");
+        sb.WriteSummary($"CBOR type info for {shortClassName}.");
         sb.AppendLine($"public sealed class {classSuffix}CborTypeInfo : CarpaNet.Cbor.CborObjectTypeInfo<{globalType}>");
         sb.OpenBrace();
 
@@ -199,7 +199,7 @@ public static class CborContextGenerator
 
         var globalType = ResolveToGlobalType(qualifiedTypeName);
 
-        sb.WriteSummary($"AOT-compatible CBOR type info for union {qualifiedTypeName}.");
+        sb.WriteSummary($"CBOR type info for union {qualifiedTypeName}.");
         sb.AppendLine($"public sealed class {classSuffix}CborTypeInfo : CarpaNet.Cbor.CborUnionTypeInfo<{globalType}>");
         sb.OpenBrace();
 

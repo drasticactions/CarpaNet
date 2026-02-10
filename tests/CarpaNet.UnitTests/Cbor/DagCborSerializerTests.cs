@@ -9,7 +9,7 @@ using Xunit;
 namespace CarpaNet.UnitTests.Cbor;
 
 /// <summary>
-/// Tests for the AOT-compatible DagCborSerializer and CborSerializerContext.
+/// Tests for the DagCborSerializer and CborSerializerContext.
 /// </summary>
 public class DagCborSerializerTests
 {
@@ -23,7 +23,7 @@ public class DagCborSerializerTests
     }
 
     /// <summary>
-    /// Example AOT-compatible type info for SimpleObject.
+    /// Example type info for SimpleObject.
     /// In a real scenario, this would be source-generated.
     /// </summary>
     public sealed class SimpleObjectTypeInfo : CborObjectTypeInfo<SimpleObject>
