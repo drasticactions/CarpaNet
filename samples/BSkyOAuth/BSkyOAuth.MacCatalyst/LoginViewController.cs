@@ -2,6 +2,8 @@
 // Copyright (c) Drastic Actions. All rights reserved.
 // </copyright>
 
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using BSkyOAuth;
 using CarpaNet;
 using CarpaNet.OAuth;
@@ -186,18 +188,49 @@ public sealed class LoginViewController : UIViewController
 
 public sealed class OauthStore : IOAuthSessionStore
 {
-    public Task DeleteAsync(string sub, CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException();
-    }
+    private readonly string _directory;
 
-    public Task<OAuthSessionData?> GetAsync(string sub, CancellationToken cancellationToken = default)
+    public OauthStore()
     {
-        throw new NotImplementedException();
+        _directory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "BSkyOAuth");
+        Directory.CreateDirectory(_directory);
     }
 
     public Task StoreAsync(string sub, OAuthSessionData data, CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        var json = JsonSerializer.Serialize(data, OAuthStoreJsonContext.Default.OAuthSessionData);
+        File.WriteAllText(GetPath(sub), json);
+        return Task.CompletedTask;
     }
+
+    public Task<OAuthSessionData?> GetAsync(string sub, CancellationToken cancellationToken = default)
+    {
+        var path = GetPath(sub);
+        if (!File.Exists(path))
+            return Task.FromResult<OAuthSessionData?>(null);
+        var json = File.ReadAllText(path);
+        var data = JsonSerializer.Deserialize(json, OAuthStoreJsonContext.Default.OAuthSessionData);
+        return Task.FromResult(data);
+    }
+
+    public Task DeleteAsync(string sub, CancellationToken cancellationToken = default)
+    {
+        var path = GetPath(sub);
+        if (File.Exists(path))
+            File.Delete(path);
+        return Task.CompletedTask;
+    }
+
+    private string GetPath(string sub) =>
+        Path.Combine(_directory, $"oauth-{sub.Replace(":", "_")}.json");
+}
+
+[JsonSerializable(typeof(OAuthSessionData))]
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+public partial class OAuthStoreJsonContext : JsonSerializerContext
+{
 }
