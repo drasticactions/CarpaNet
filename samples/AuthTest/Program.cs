@@ -9,6 +9,7 @@ using AppBsky.Notification;
 using ComAtproto.Repo;
 using CarpaNet.OAuth;
 using CarpaNet.OAuth.Storage;
+using CarpaNet.Storage;
 using CarpaNet;
 
 const string SessionDir = ".atproto-sessions";
@@ -72,24 +73,11 @@ async Task PasswordFlowAsync()
 
     try
     {
-        var client = ATProtoClientFactory.CreateSessionClient();
+        var sessionStore = new FileSessionStore(GetSessionDir());
+        var client = ATProtoClientFactory.CreateSessionClient(sessionStore);
         var session = await client.LoginAsync(identifier, password);
         Console.WriteLine($"Logged in as {session.Handle} ({session.Did})");
-
-        // Offer to save the session
-        Console.Write("Save session for later? (y/n): ");
-        if (Console.ReadLine()?.Trim().Equals("y", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            SavePasswordSession(new PasswordSessionData
-            {
-                AccessJwt = session.AccessJwt,
-                RefreshJwt = session.RefreshJwt,
-                Did = session.Did,
-                Handle = session.Handle,
-                PdsUrl = client.BaseUrl.ToString()
-            });
-            Console.WriteLine("Session saved.");
-        }
+        Console.WriteLine("Session saved automatically.");
 
         await AuthenticatedMenuAsync(client, session.Handle, session.Did);
     }
@@ -192,24 +180,32 @@ async Task OAuthFlowAsync()
 
 async Task RestorePasswordSessionAsync()
 {
-    var data = LoadPasswordSession();
-    if (data == null)
+    Console.Write("DID to restore: ");
+    var did = Console.ReadLine()?.Trim();
+    if (string.IsNullOrEmpty(did))
     {
-        Console.WriteLine("No saved password session found.");
+        Console.WriteLine("DID is required.");
         return;
     }
 
     try
     {
-        Console.WriteLine($"Restoring session for {data.Handle} ({data.Did})...");
-        var client = ATProtoClientFactory.CreateSessionClient();
-        client.RestoreSession(data.AccessJwt, data.RefreshJwt, data.Did, data.Handle, new Uri(data.PdsUrl));
+        Console.WriteLine($"Restoring session for {did}...");
+        var sessionStore = new FileSessionStore(GetSessionDir());
+        var client = ATProtoClientFactory.CreateSessionClient(sessionStore);
+        var restored = await client.RestoreSessionAsync(did);
+
+        if (!restored)
+        {
+            Console.WriteLine("No saved password session found for that DID.");
+            return;
+        }
 
         // Refresh to verify the session is still valid
         await client.TokenProvider.RefreshAsync();
-        Console.WriteLine($"Session restored for {data.Handle} ({data.Did})");
+        Console.WriteLine($"Session restored for {client.Handle} ({client.AuthenticatedDid})");
 
-        await AuthenticatedMenuAsync(client, data.Handle, data.Did);
+        await AuthenticatedMenuAsync(client, client.Handle, client.AuthenticatedDid!);
     }
     catch (Exception ex)
     {
@@ -301,7 +297,7 @@ async Task AuthenticatedMenuAsync(IATProtoClient client, string? handle, string 
                     await DeletePostAsync(client, did);
                     break;
                 case "7":
-                    SaveCurrentSession(client, handle, did);
+                    SaveCurrentSession(client);
                     break;
                 case "8":
                     await ShowSessionTokensAsync(client);
@@ -475,26 +471,11 @@ async Task ShowSessionTokensAsync(IATProtoClient client)
     }
 }
 
-void SaveCurrentSession(IATProtoClient client, string? handle, string did)
+void SaveCurrentSession(IATProtoClient client)
 {
-    if (client is ATProtoSessionClient sessionClient)
+    if (client is ATProtoSessionClient)
     {
-        var tp = sessionClient.TokenProvider;
-        if (string.IsNullOrEmpty(tp.AccessJwt) || string.IsNullOrEmpty(tp.RefreshJwt))
-        {
-            Console.WriteLine("No active session tokens to save.");
-            return;
-        }
-
-        SavePasswordSession(new PasswordSessionData
-        {
-            AccessJwt = tp.AccessJwt,
-            RefreshJwt = tp.RefreshJwt,
-            Did = did,
-            Handle = handle ?? tp.Handle ?? string.Empty,
-            PdsUrl = sessionClient.BaseUrl.ToString()
-        });
-        Console.WriteLine("Password session saved.");
+        Console.WriteLine("Password sessions are saved automatically.");
     }
     else
     {
@@ -509,21 +490,6 @@ static string GetSessionDir()
     var dir = Path.Combine(AppContext.BaseDirectory, SessionDir);
     Directory.CreateDirectory(dir);
     return dir;
-}
-
-static void SavePasswordSession(PasswordSessionData data)
-{
-    var dir = GetSessionDir();
-    var json = JsonSerializer.Serialize(data, AuthTestJsonContext.Default.PasswordSessionData);
-    File.WriteAllText(Path.Combine(dir, "password-session.json"), json);
-}
-
-static PasswordSessionData? LoadPasswordSession()
-{
-    var path = Path.Combine(GetSessionDir(), "password-session.json");
-    if (!File.Exists(path)) return null;
-    var json = File.ReadAllText(path);
-    return JsonSerializer.Deserialize(json, AuthTestJsonContext.Default.PasswordSessionData);
 }
 
 static void SaveOAuthMetadata(OAuthMetadata data)
@@ -577,15 +543,6 @@ static string ReadPassword()
 
 // --- Session data models ---
 
-public sealed class PasswordSessionData
-{
-    public string AccessJwt { get; set; } = string.Empty;
-    public string RefreshJwt { get; set; } = string.Empty;
-    public string Did { get; set; } = string.Empty;
-    public string Handle { get; set; } = string.Empty;
-    public string PdsUrl { get; set; } = string.Empty;
-}
-
 public sealed class OAuthMetadata
 {
     public string Did { get; set; } = string.Empty;
@@ -594,7 +551,46 @@ public sealed class OAuthMetadata
     public string Scope { get; set; } = string.Empty;
 }
 
-// --- File-backed OAuth session store ---
+// --- File-backed session stores ---
+
+public sealed class FileSessionStore : ISessionStore
+{
+    private readonly string _directory;
+
+    public FileSessionStore(string directory)
+    {
+        _directory = directory;
+        Directory.CreateDirectory(directory);
+    }
+
+    public Task StoreAsync(string sub, SessionData data, CancellationToken cancellationToken = default)
+    {
+        var json = JsonSerializer.Serialize(data, AuthTestJsonContext.Default.SessionData);
+        File.WriteAllText(GetPath(sub), json);
+        return Task.CompletedTask;
+    }
+
+    public Task<SessionData?> GetAsync(string sub, CancellationToken cancellationToken = default)
+    {
+        var path = GetPath(sub);
+        if (!File.Exists(path))
+            return Task.FromResult<SessionData?>(null);
+        var json = File.ReadAllText(path);
+        var data = JsonSerializer.Deserialize(json, AuthTestJsonContext.Default.SessionData);
+        return Task.FromResult(data);
+    }
+
+    public Task DeleteAsync(string sub, CancellationToken cancellationToken = default)
+    {
+        var path = GetPath(sub);
+        if (File.Exists(path))
+            File.Delete(path);
+        return Task.CompletedTask;
+    }
+
+    private string GetPath(string sub) =>
+        Path.Combine(_directory, $"session-{sub.Replace(":", "_")}.json");
+}
 
 public sealed class FileOAuthSessionStore : IOAuthSessionStore
 {
@@ -637,7 +633,7 @@ public sealed class FileOAuthSessionStore : IOAuthSessionStore
 
 // --- AOT-safe JSON context ---
 
-[JsonSerializable(typeof(PasswordSessionData))]
+[JsonSerializable(typeof(SessionData))]
 [JsonSerializable(typeof(OAuthMetadata))]
 [JsonSerializable(typeof(OAuthSessionData))]
 [JsonSourceGenerationOptions(

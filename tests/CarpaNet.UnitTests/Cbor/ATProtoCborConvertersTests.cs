@@ -80,7 +80,7 @@ public class ATProtoCborConvertersTests
 
         // Assert
         Assert.Equal(did, result.Value);
-        Assert.True(result.IsValid);
+        Assert.True(ATDid.IsValid(result.Value));
         Assert.Equal("plc", result.Method);
     }
 

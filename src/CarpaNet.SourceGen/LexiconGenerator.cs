@@ -1138,6 +1138,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         sb.WriteUsing("CarpaNet");
         sb.WriteUsing("CarpaNet.Cbor");
         sb.WriteUsing("CarpaNet.Identity");
+        sb.WriteUsing("CarpaNet.Storage");
         sb.AppendLine();
 
         var jsonContextNs = string.IsNullOrEmpty(options.RootNamespace)
@@ -1232,6 +1233,28 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         sb.AppendLine($"global::{cborContextNs}.{options.CborContextName}.Default,");
         sb.AppendLine("identityResolver,");
         sb.AppendLine("labelerDids);");
+        sb.Unindent();
+        sb.CloseBrace();
+        sb.AppendLine();
+
+        // CreateSessionClient with ISessionStore
+        sb.WriteSummary("Creates an ATProtoSessionClient with the generated serialization contexts and a session store for automatic persistence.");
+        sb.AppendLine("public static ATProtoSessionClient CreateSessionClient(");
+        sb.Indent();
+        sb.AppendLine("ISessionStore sessionStore,");
+        sb.AppendLine("HttpClient? httpClient = null,");
+        sb.AppendLine("IdentityResolver? identityResolver = null,");
+        sb.AppendLine("IReadOnlyList<string>? labelerDids = null)");
+        sb.Unindent();
+        sb.OpenBrace();
+        sb.AppendLine("return new ATProtoSessionClient(");
+        sb.Indent();
+        sb.AppendLine("httpClient ?? new HttpClient(),");
+        sb.AppendLine("CreateJsonOptions(),");
+        sb.AppendLine($"global::{cborContextNs}.{options.CborContextName}.Default,");
+        sb.AppendLine("identityResolver,");
+        sb.AppendLine("labelerDids,");
+        sb.AppendLine("sessionStore);");
         sb.Unindent();
         sb.CloseBrace();
 

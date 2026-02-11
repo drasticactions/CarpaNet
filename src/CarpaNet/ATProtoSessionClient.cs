@@ -11,6 +11,7 @@ using CarpaNet.Cbor;
 using CarpaNet.EventStream;
 using CarpaNet.Http;
 using CarpaNet.Identity;
+using CarpaNet.Storage;
 
 namespace CarpaNet;
 
@@ -75,13 +76,15 @@ public sealed class ATProtoSessionClient : IATProtoClient, IDisposable
     /// <param name="cborContext">The CBOR serializer context (must be a source-generated context).</param>
     /// <param name="identityResolver">Optional identity resolver.</param>
     /// <param name="labelerDids">Optional list of labeler DIDs.</param>
+    /// <param name="sessionStore">Optional session store for automatic persistence.</param>
     public ATProtoSessionClient(
         HttpClient httpClient,
         JsonSerializerOptions jsonOptions,
         CborSerializerContext cborContext,
         IdentityResolver? identityResolver = null,
-        IReadOnlyList<string>? labelerDids = null)
-        : this(httpClient, ownsHttpClient: false, identityResolver, jsonOptions, cborContext, labelerDids)
+        IReadOnlyList<string>? labelerDids = null,
+        ISessionStore? sessionStore = null)
+        : this(httpClient, ownsHttpClient: false, identityResolver, jsonOptions, cborContext, labelerDids, sessionStore)
     {
     }
 
@@ -91,11 +94,12 @@ public sealed class ATProtoSessionClient : IATProtoClient, IDisposable
         IdentityResolver? identityResolver,
         JsonSerializerOptions jsonOptions,
         CborSerializerContext cborContext,
-        IReadOnlyList<string>? labelerDids)
+        IReadOnlyList<string>? labelerDids,
+        ISessionStore? sessionStore)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _ownsHttpClient = ownsHttpClient;
-        _tokenProvider = new SessionTokenProvider(httpClient);
+        _tokenProvider = new SessionTokenProvider(httpClient, sessionStore: sessionStore);
         IdentityResolver = identityResolver;
         _jsonOptions = jsonOptions ?? throw new ArgumentNullException(nameof(jsonOptions));
         _cborContext = cborContext ?? throw new ArgumentNullException(nameof(cborContext));
@@ -138,6 +142,19 @@ public sealed class ATProtoSessionClient : IATProtoClient, IDisposable
     }
 
     /// <summary>
+    /// Restores a session from the session store by DID.
+    /// Requires a session store to be configured.
+    /// </summary>
+    /// <param name="sub">The user's DID (subject).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if the session was restored, false if no stored session was found.</returns>
+    public Task<bool> RestoreSessionAsync(string sub, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _tokenProvider.RestoreSessionAsync(sub, cancellationToken);
+    }
+
+    /// <summary>
     /// Logs out and clears the current session.
     /// Optionally deletes the session on the server.
     /// </summary>
@@ -168,7 +185,7 @@ public sealed class ATProtoSessionClient : IATProtoClient, IDisposable
             }
         }
 
-        _tokenProvider.ClearSession();
+        await _tokenProvider.ClearSessionAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

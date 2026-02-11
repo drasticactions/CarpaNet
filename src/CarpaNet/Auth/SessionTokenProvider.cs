@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CarpaNet.Http;
 using CarpaNet.Identity;
+using CarpaNet.Storage;
 using CarpaNet.Xrpc;
 
 namespace CarpaNet.Auth;
@@ -20,6 +21,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
     private readonly bool _ownsHttpClient;
     private readonly SemaphoreSlim _refreshLock = new SemaphoreSlim(1, 1);
     private readonly TimeSpan _refreshBuffer;
+    private readonly ISessionStore? _sessionStore;
 
     private string? _accessJwt;
     private string? _refreshJwt;
@@ -66,8 +68,9 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
     /// Creates a new HttpClient that will be disposed with this provider.
     /// </summary>
     /// <param name="refreshBuffer">Time before expiry to trigger proactive refresh (default: 30 seconds).</param>
-    public SessionTokenProvider(TimeSpan? refreshBuffer = null)
-        : this(new HttpClient(), ownsHttpClient: true, refreshBuffer)
+    /// <param name="sessionStore">Optional session store for automatic persistence.</param>
+    public SessionTokenProvider(TimeSpan? refreshBuffer = null, ISessionStore? sessionStore = null)
+        : this(new HttpClient(), ownsHttpClient: true, refreshBuffer, sessionStore)
     {
     }
 
@@ -76,16 +79,18 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
     /// </summary>
     /// <param name="httpClient">The HttpClient to use for auth requests.</param>
     /// <param name="refreshBuffer">Time before expiry to trigger proactive refresh (default: 30 seconds).</param>
-    public SessionTokenProvider(HttpClient httpClient, TimeSpan? refreshBuffer = null)
-        : this(httpClient, ownsHttpClient: false, refreshBuffer)
+    /// <param name="sessionStore">Optional session store for automatic persistence.</param>
+    public SessionTokenProvider(HttpClient httpClient, TimeSpan? refreshBuffer = null, ISessionStore? sessionStore = null)
+        : this(httpClient, ownsHttpClient: false, refreshBuffer, sessionStore)
     {
     }
 
-    private SessionTokenProvider(HttpClient httpClient, bool ownsHttpClient, TimeSpan? refreshBuffer)
+    private SessionTokenProvider(HttpClient httpClient, bool ownsHttpClient, TimeSpan? refreshBuffer, ISessionStore? sessionStore)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _ownsHttpClient = ownsHttpClient;
         _refreshBuffer = refreshBuffer ?? TimeSpan.FromSeconds(30);
+        _sessionStore = sessionStore;
     }
 
     /// <summary>
@@ -145,7 +150,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
         }
 
         // Store session data
-        UpdateSession(session, serviceUrl);
+        await UpdateSessionAsync(session, serviceUrl).ConfigureAwait(false);
 
         return session;
     }
@@ -234,7 +239,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
                 throw new ATProtoException("Failed to parse refresh session response.");
             }
 
-            UpdateSession(session, _pdsUrl);
+            await UpdateSessionAsync(session, _pdsUrl).ConfigureAwait(false);
         }
         finally
         {
@@ -255,7 +260,47 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
         _accessExpiry = default;
     }
 
-    private void UpdateSession(SessionResponse session, Uri pdsUrl)
+    /// <summary>
+    /// Clears the current session and deletes it from the store if configured.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task ClearSessionAsync(CancellationToken cancellationToken = default)
+    {
+        var did = _did;
+        ClearSession();
+
+        if (_sessionStore != null && !string.IsNullOrEmpty(did))
+        {
+            await _sessionStore.DeleteAsync(did, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Restores a session from the session store.
+    /// </summary>
+    /// <param name="sub">The user's DID (subject).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if the session was restored, false if no stored session was found.</returns>
+    public async Task<bool> RestoreSessionAsync(string sub, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+
+        if (_sessionStore == null)
+        {
+            throw new InvalidOperationException("No session store configured.");
+        }
+
+        var data = await _sessionStore.GetAsync(sub, cancellationToken).ConfigureAwait(false);
+        if (data == null)
+        {
+            return false;
+        }
+
+        RestoreSession(data.AccessJwt, data.RefreshJwt, data.Did, data.Handle, new Uri(data.PdsUrl));
+        return true;
+    }
+
+    private async Task UpdateSessionAsync(SessionResponse session, Uri pdsUrl)
     {
         _accessJwt = session.AccessJwt;
         _refreshJwt = session.RefreshJwt;
@@ -263,6 +308,19 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
         _handle = session.Handle;
         _pdsUrl = pdsUrl;
         _accessExpiry = ParseJwtExpiry(session.AccessJwt);
+
+        // Persist to store if configured
+        if (_sessionStore != null && !string.IsNullOrEmpty(session.Did))
+        {
+            await _sessionStore.StoreAsync(session.Did, new SessionData
+            {
+                AccessJwt = session.AccessJwt,
+                RefreshJwt = session.RefreshJwt,
+                Did = session.Did,
+                Handle = session.Handle,
+                PdsUrl = pdsUrl.ToString()
+            }).ConfigureAwait(false);
+        }
 
         // Notify listeners
         TokenRefreshed?.Invoke(this, new TokenRefreshedEventArgs(
