@@ -155,15 +155,6 @@ async Task OAuthFlowAsync()
 
         var session = await oauthClient.CallbackAsync(callbackUrl);
         Console.WriteLine($"Authenticated as {session.Did}");
-
-        // Save OAuth metadata for restore (DID + client config)
-        SaveOAuthMetadata(new OAuthMetadata
-        {
-            Did = session.Did,
-            ClientId = clientId,
-            RedirectUri = redirectUri,
-            Scope = "atproto transition:generic"
-        });
         Console.WriteLine("OAuth session saved automatically.");
 
         await AuthenticatedMenuAsync(session, null, session.Did);
@@ -215,34 +206,43 @@ async Task RestorePasswordSessionAsync()
 
 async Task RestoreOAuthSessionAsync()
 {
-    var metadata = LoadOAuthMetadata();
-    if (metadata == null)
+    Console.Write("DID to restore: ");
+    var did = Console.ReadLine()?.Trim();
+    if (string.IsNullOrEmpty(did))
     {
-        Console.WriteLine("No saved OAuth session found.");
+        Console.WriteLine("DID is required.");
         return;
     }
 
     try
     {
-        Console.WriteLine($"Restoring OAuth session for {metadata.Did}...");
+        Console.WriteLine($"Restoring OAuth session for {did}...");
 
         var sessionStore = new FileOAuthSessionStore(GetSessionDir());
 
+        // Load stored session data to get the client config
+        var sessionData = await sessionStore.GetAsync(did);
+        if (sessionData == null || string.IsNullOrEmpty(sessionData.ClientId))
+        {
+            Console.WriteLine("No saved OAuth session found for that DID.");
+            return;
+        }
+
         var config = new OAuthClientConfig
         {
-            ClientId = metadata.ClientId,
-            RedirectUri = metadata.RedirectUri,
-            Scope = metadata.Scope,
+            ClientId = sessionData.ClientId,
+            RedirectUri = sessionData.RedirectUri ?? string.Empty,
+            Scope = sessionData.Scope ?? "atproto",
             JsonOptions = ATProtoClientFactory.CreateJsonOptions(),
             SessionStore = sessionStore
         };
 
         using var oauthClient = new ATProtoOAuthClient(config);
-        var session = await oauthClient.RestoreSessionAsync(metadata.Did);
+        var session = await oauthClient.RestoreSessionAsync(did);
 
         if (session == null)
         {
-            Console.WriteLine("Failed to restore OAuth session (no stored data found).");
+            Console.WriteLine("Failed to restore OAuth session.");
             return;
         }
 
@@ -492,21 +492,6 @@ static string GetSessionDir()
     return dir;
 }
 
-static void SaveOAuthMetadata(OAuthMetadata data)
-{
-    var dir = GetSessionDir();
-    var json = JsonSerializer.Serialize(data, AuthTestJsonContext.Default.OAuthMetadata);
-    File.WriteAllText(Path.Combine(dir, "oauth-metadata.json"), json);
-}
-
-static OAuthMetadata? LoadOAuthMetadata()
-{
-    var path = Path.Combine(GetSessionDir(), "oauth-metadata.json");
-    if (!File.Exists(path)) return null;
-    var json = File.ReadAllText(path);
-    return JsonSerializer.Deserialize(json, AuthTestJsonContext.Default.OAuthMetadata);
-}
-
 static int FindFreePort()
 {
     var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
@@ -539,16 +524,6 @@ static string ReadPassword()
         }
     }
     return sb.ToString();
-}
-
-// --- Session data models ---
-
-public sealed class OAuthMetadata
-{
-    public string Did { get; set; } = string.Empty;
-    public string ClientId { get; set; } = string.Empty;
-    public string RedirectUri { get; set; } = string.Empty;
-    public string Scope { get; set; } = string.Empty;
 }
 
 // --- File-backed session stores ---
@@ -634,7 +609,6 @@ public sealed class FileOAuthSessionStore : IOAuthSessionStore
 // --- AOT-safe JSON context ---
 
 [JsonSerializable(typeof(SessionData))]
-[JsonSerializable(typeof(OAuthMetadata))]
 [JsonSerializable(typeof(OAuthSessionData))]
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,

@@ -24,6 +24,21 @@ public sealed class OAuthSessionData
     /// The token set.
     /// </summary>
     public TokenSet TokenSet { get; set; } = new();
+
+    /// <summary>
+    /// The OAuth client ID used for this session.
+    /// </summary>
+    public string? ClientId { get; set; }
+
+    /// <summary>
+    /// The OAuth redirect URI used for this session.
+    /// </summary>
+    public string? RedirectUri { get; set; }
+
+    /// <summary>
+    /// The OAuth scope used for this session.
+    /// </summary>
+    public string? Scope { get; set; }
 }
 
 /// <summary>

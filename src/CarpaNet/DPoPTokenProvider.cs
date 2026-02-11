@@ -22,6 +22,8 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
     private readonly DPoPNonceCache _nonceCache;
     private readonly TimeSpan _refreshBuffer;
     private readonly string? _clientId;
+    private readonly string? _redirectUri;
+    private readonly string? _scope;
     private readonly SemaphoreSlim _refreshLock = new SemaphoreSlim(1, 1);
 
     private string? _sub;
@@ -65,12 +67,16 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
     /// <param name="discovery">The authorization server discovery client.</param>
     /// <param name="refreshBuffer">Token refresh buffer time.</param>
     /// <param name="clientId">The OAuth client ID to include in token requests.</param>
+    /// <param name="redirectUri">The OAuth redirect URI to persist with the session.</param>
+    /// <param name="scope">The OAuth scope to persist with the session.</param>
     public DPoPTokenProvider(
         HttpClient httpClient,
         IOAuthSessionStore sessionStore,
         AuthorizationServerDiscovery? discovery = null,
         TimeSpan? refreshBuffer = null,
-        string? clientId = null)
+        string? clientId = null,
+        string? redirectUri = null,
+        string? scope = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _sessionStore = sessionStore ?? throw new ArgumentNullException(nameof(sessionStore));
@@ -78,6 +84,8 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
         _nonceCache = new DPoPNonceCache();
         _refreshBuffer = refreshBuffer ?? TimeSpan.FromSeconds(30);
         _clientId = clientId;
+        _redirectUri = redirectUri;
+        _scope = scope;
     }
 
     /// <summary>
@@ -129,7 +137,10 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
         await _sessionStore.StoreAsync(sub, new OAuthSessionData
         {
             DPoPKey = dpopKey.ExportKeyPair(),
-            TokenSet = tokenSet
+            TokenSet = tokenSet,
+            ClientId = _clientId,
+            RedirectUri = _redirectUri,
+            Scope = _scope
         }, cancellationToken).ConfigureAwait(false);
     }
 
@@ -211,7 +222,10 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
             await _sessionStore.StoreAsync(_sub!, new OAuthSessionData
             {
                 DPoPKey = _dpopKey.ExportKeyPair(),
-                TokenSet = _tokenSet
+                TokenSet = _tokenSet,
+                ClientId = _clientId,
+                RedirectUri = _redirectUri,
+                Scope = _scope
             }, cancellationToken).ConfigureAwait(false);
 
             // Notify listeners

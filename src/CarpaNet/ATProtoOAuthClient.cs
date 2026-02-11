@@ -219,7 +219,9 @@ public sealed class ATProtoOAuthClient : IDisposable
                 _sessionStore,
                 _discovery,
                 _config.RefreshBuffer,
-                _config.ClientId);
+                _config.ClientId,
+                _config.RedirectUri,
+                _config.Scope);
 
             await tokenProvider.SetupAsync(
                 tokenSet.Sub,
@@ -260,7 +262,9 @@ public sealed class ATProtoOAuthClient : IDisposable
             _sessionStore,
             _discovery,
             _config.RefreshBuffer,
-            _config.ClientId);
+            _config.ClientId,
+            _config.RedirectUri,
+            _config.Scope);
 
         var restored = await tokenProvider.RestoreSessionAsync(sub, cancellationToken).ConfigureAwait(false);
         if (!restored)
