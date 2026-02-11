@@ -26,12 +26,17 @@ public readonly struct ATIdentifier : IEquatable<ATIdentifier>
     /// <summary>
     /// Returns true if this identifier is a DID.
     /// </summary>
-    public bool IsDid => !string.IsNullOrEmpty(Value) && Value.StartsWith("did:");
+    public bool IsDid => DIDValidator.EnsureValidDid(Value);
 
     /// <summary>
     /// Returns true if this identifier is a Handle.
     /// </summary>
-    public bool IsHandle => !IsDid;
+    public bool IsHandle => HandleValidator.EnsureValidHandle(Value);
+
+    /// <summary>
+    /// Returns true if this identifier is either a valid DID or a valid Handle.
+    /// </summary>
+    public bool IsValid => IsDid || IsHandle;
 
     /// <summary>
     /// Gets this identifier as a DID, if it is one.

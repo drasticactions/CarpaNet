@@ -42,9 +42,20 @@ public readonly struct ATDid : IEquatable<ATDid>
     }
 
     /// <summary>
-    /// Validates if this is a properly formatted DID.
+    /// Validate if a given string is a valid ATDid.
     /// </summary>
-    public bool IsValid => !string.IsNullOrEmpty(Value) && Value.StartsWith("did:");
+    /// <param name="uri">Uri.</param>
+    /// <returns>Bool.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if uri is null or empty.</exception>
+    public static bool IsValid(string? uri)
+    {
+        if (string.IsNullOrEmpty(uri))
+        {
+            throw new ArgumentNullException(nameof(uri));
+        }
+
+        return DIDValidator.EnsureValidDid(uri);
+    }
 
     public bool Equals(ATDid other) => Value == other.Value;
     public override bool Equals(object? obj) => obj is ATDid other && Equals(other);

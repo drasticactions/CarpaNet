@@ -27,10 +27,7 @@ public readonly struct ATHandle : IEquatable<ATHandle>
     /// <summary>
     /// Validates if this is a properly formatted handle.
     /// </summary>
-    public bool IsValid => !string.IsNullOrEmpty(Value) &&
-                           Value.Contains(".") &&
-                           !Value.StartsWith(".") &&
-                           !Value.EndsWith(".");
+    public bool IsValid => HandleValidator.EnsureValidHandle(Value);
 
     public bool Equals(ATHandle other) => string.Equals(Value, other.Value, StringComparison.OrdinalIgnoreCase);
     public override bool Equals(object? obj) => obj is ATHandle other && Equals(other);
