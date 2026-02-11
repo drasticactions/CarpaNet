@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AppBsky.Feed;
 using BSkyOAuth;
 using CarpaNet;
 using CarpaNet.OAuth;
@@ -169,10 +170,86 @@ public sealed class LoginViewController : UIViewController
 
     private async void GetTimelineButton_TouchUpInside(object? sender, EventArgs e)
     {
+        try
+        {
+            var parameters = new GetTimelineParameters { Limit = 10 };
+            var timeline = await this.client.AppBskyFeedGetTimelineAsync(parameters);
+
+            var message = $"Feed items: {timeline.Feed?.Count ?? 0}\n";
+            if (timeline.Feed != null)
+            {
+                foreach (var item in timeline.Feed)
+                {
+                    var author = item.Post?.Author;
+                    message += $"\n@{author?.Handle} ({author?.DisplayName})";
+                }
+            }
+
+            this.InvokeOnMainThread(() =>
+            {
+                var alert = UIAlertController.Create("Timeline", message, UIAlertControllerStyle.Alert);
+                alert.AddAction(UIAlertAction.Create("OK", UIAlertActionStyle.Default, null));
+                this.PresentViewController(alert, true, null);
+            });
+        }
+        catch (Exception ex)
+        {
+            this.InvokeOnMainThread(() =>
+            {
+                var alert = UIAlertController.Create("Error", $"Failed to get timeline: {ex.Message}", UIAlertControllerStyle.Alert);
+                alert.AddAction(UIAlertAction.Create("OK", UIAlertActionStyle.Default, null));
+                this.PresentViewController(alert, true, null);
+            });
+        }
     }
 
     private async void LoadSessionButton_TouchUpInside(object? sender, EventArgs e)
     {
+        var alert = UIAlertController.Create("Restore Session", "Enter your DID", UIAlertControllerStyle.Alert);
+        alert.AddTextField(field => field.Placeholder = "did:plc:...");
+
+        var tcs = new TaskCompletionSource<string?>();
+        alert.AddAction(UIAlertAction.Create("Cancel", UIAlertActionStyle.Cancel, _ => tcs.SetResult(null)));
+        alert.AddAction(UIAlertAction.Create("Restore", UIAlertActionStyle.Default, _ => tcs.SetResult(alert.TextFields?[0].Text)));
+        this.PresentViewController(alert, true, null);
+
+        var did = await tcs.Task;
+        if (string.IsNullOrWhiteSpace(did))
+            return;
+
+        try
+        {
+            var session = await this.oauthClient.RestoreSessionAsync(did);
+            if (session != null)
+            {
+                this.client = session;
+                this.InvokeOnMainThread(() =>
+                {
+                    this.getTimelineButton.Enabled = true;
+                    var successAlert = UIAlertController.Create("Success", $"Session restored for {session.Did}", UIAlertControllerStyle.Alert);
+                    successAlert.AddAction(UIAlertAction.Create("OK", UIAlertActionStyle.Default, null));
+                    this.PresentViewController(successAlert, true, null);
+                });
+            }
+            else
+            {
+                this.InvokeOnMainThread(() =>
+                {
+                    var errorAlert = UIAlertController.Create("Error", "No saved session found for that DID.", UIAlertControllerStyle.Alert);
+                    errorAlert.AddAction(UIAlertAction.Create("OK", UIAlertActionStyle.Default, null));
+                    this.PresentViewController(errorAlert, true, null);
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            this.InvokeOnMainThread(() =>
+            {
+                var errorAlert = UIAlertController.Create("Error", $"Failed to restore session: {ex.Message}", UIAlertControllerStyle.Alert);
+                errorAlert.AddAction(UIAlertAction.Create("OK", UIAlertActionStyle.Default, null));
+                this.PresentViewController(errorAlert, true, null);
+            });
+        }
     }
 
     private void OnError(NSError? error)
