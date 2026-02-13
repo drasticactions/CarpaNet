@@ -174,7 +174,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     /// Creates a new ATProtoClient with the specified options.
     /// </summary>
     /// <param name="options">The configuration options.</param>
-    ATProtoClient(ATProtoClientOptions options)
+    public ATProtoClient(ATProtoClientOptions options)
         : this(options, ownsHttpClient: options.HttpClient == null, ownsTokenProvider: false)
     {
     }

@@ -20,9 +20,9 @@ public sealed class LoginViewController : UIViewController
     private const string RedirectUri = "vip.drasticactions:/callback";
 
     private readonly OAuthManager oauthManager;
-    private readonly ATProtoOAuthClient oauthClient;
+    private readonly OAuthSession oauthClient;
 
-    private OAuthSession client;
+    private ATProtoOAuthClient client;
 
     private UIButton authButton;
 
@@ -52,7 +52,7 @@ public sealed class LoginViewController : UIViewController
             SessionStore = this.sessionStore
         };
 
-        this.oauthClient = new ATProtoOAuthClient(config);
+        this.oauthClient = new OAuthSession(config);
 
         this.View!.BackgroundColor = UIColor.SystemBackground;
 

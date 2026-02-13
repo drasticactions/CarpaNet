@@ -119,7 +119,7 @@ async Task OAuthFlowAsync()
             SessionStore = sessionStore
         };
 
-        using var oauthClient = new ATProtoOAuthClient(config);
+        using var oauthClient = new OAuthSession(config);
 
         Console.WriteLine("Starting OAuth flow...");
         var authUrl = await oauthClient.AuthorizeAsync(handle);
@@ -237,7 +237,7 @@ async Task RestoreOAuthSessionAsync()
             SessionStore = sessionStore
         };
 
-        using var oauthClient = new ATProtoOAuthClient(config);
+        using var oauthClient = new OAuthSession(config);
         var session = await oauthClient.RestoreSessionAsync(did);
 
         if (session == null)
@@ -446,7 +446,7 @@ async Task ShowSessionTokensAsync(IATProtoClient client)
             Console.WriteLine($"  Expires In: {(remaining > TimeSpan.Zero ? remaining.ToString(@"hh\:mm\:ss") : "expired")}");
         }
     }
-    else if (client is CarpaNet.OAuth.OAuthSession oauthSession)
+    else if (client is CarpaNet.OAuth.ATProtoOAuthClient oauthSession)
     {
         var tp = (CarpaNet.OAuth.DPoPTokenProvider)oauthSession.TokenProvider;
         Console.WriteLine($"  DID: {tp.CurrentDid}");
