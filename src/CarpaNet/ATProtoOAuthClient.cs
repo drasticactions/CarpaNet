@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CarpaNet;
 using CarpaNet.Auth;
+using CarpaNet.Http;
 using CarpaNet.Identity;
 
 namespace CarpaNet.OAuth;
@@ -85,11 +86,11 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var url = BuildUrl(nsid, parameters);
+        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid, parameters).ToString();
         using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Get, url);
 
         var response = await SendWithRetryAsync(request, url, cancellationToken).ConfigureAwait(false);
-        return await ProcessResponseAsync<TOutput>(response, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -101,12 +102,12 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var url = BuildUrl(nsid, parameters);
+        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid, parameters).ToString();
         using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Get, url);
         request.Headers.Add("atproto-proxy", proxyServiceDid);
 
         var response = await SendWithRetryAsync(request, url, cancellationToken).ConfigureAwait(false);
-        return await ProcessResponseAsync<TOutput>(response, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -117,7 +118,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var url = BuildUrl(nsid);
+        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid).ToString();
         using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Post, url);
 
         if (input != null)
@@ -128,7 +129,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         }
 
         var response = await SendWithRetryAsync(request, url, cancellationToken).ConfigureAwait(false);
-        return await ProcessResponseAsync<TOutput>(response, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -140,7 +141,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var url = BuildUrl(nsid);
+        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid).ToString();
         using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Post, url);
         request.Headers.Add("atproto-proxy", proxyServiceDid);
 
@@ -152,7 +153,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         }
 
         var response = await SendWithRetryAsync(request, url, cancellationToken).ConfigureAwait(false);
-        return await ProcessResponseAsync<TOutput>(response, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -176,35 +177,6 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         // The actual revocation should be done through OAuthSession.RevokeAsync
         // This just marks the local session as invalid
         Dispose();
-    }
-
-    private string BuildUrl(string nsid, IReadOnlyDictionary<string, string>? parameters = null)
-    {
-        var url = $"{BaseUrl.ToString().TrimEnd('/')}/xrpc/{nsid}";
-
-        if (parameters != null && parameters.Count > 0)
-        {
-            var sb = new System.Text.StringBuilder(url);
-            sb.Append('?');
-
-            var first = true;
-            foreach (var kvp in parameters)
-            {
-                if (!first)
-                {
-                    sb.Append('&');
-                }
-                first = false;
-
-                sb.Append(Uri.EscapeDataString(kvp.Key));
-                sb.Append('=');
-                sb.Append(Uri.EscapeDataString(kvp.Value));
-            }
-
-            url = sb.ToString();
-        }
-
-        return url;
     }
 
     private async Task<HttpResponseMessage> SendWithRetryAsync(
@@ -251,36 +223,6 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         }
 
         return response;
-    }
-
-    private async Task<TOutput> ProcessResponseAsync<TOutput>(
-        HttpResponseMessage response,
-        CancellationToken cancellationToken)
-    {
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            throw new OAuthException(
-                "request_failed",
-                $"Request failed with status {response.StatusCode}: {errorContent}");
-        }
-
-#if NET8_0_OR_GREATER
-        var content = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        var typeInfo = (JsonTypeInfo<TOutput>)_jsonOptions.GetTypeInfo(typeof(TOutput));
-        var result = await JsonSerializer.DeserializeAsync(content, typeInfo, cancellationToken).ConfigureAwait(false);
-#else
-        var contentString = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-        var typeInfo = (JsonTypeInfo<TOutput>)_jsonOptions.GetTypeInfo(typeof(TOutput));
-        var result = JsonSerializer.Deserialize<TOutput>(contentString, typeInfo);
-#endif
-
-        if (result == null)
-        {
-            throw new OAuthException("invalid_response", "Failed to deserialize response.");
-        }
-
-        return result;
     }
 
     private void ThrowIfDisposed()

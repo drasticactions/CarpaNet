@@ -16,13 +16,15 @@ namespace CarpaNet.UnitTests.Http;
 /// </summary>
 public class XrpcUrlBuildingTests
 {
-    private static ATProtoPublicClient CreateClient(HttpClient httpClient, Uri baseUrl)
+    private static ATProtoClient CreateClient(HttpClient httpClient, Uri baseUrl)
     {
-        return new ATProtoPublicClient(
-            httpClient,
-            TestHelpers.CreateJsonOptions(),
-            TestHelpers.CreateCborContext(),
-            baseUrl);
+        return ATProtoClient.CreatePublic(new ATProtoClientOptions
+        {
+            HttpClient = httpClient,
+            JsonOptions = TestHelpers.CreateJsonOptions(),
+            CborContext = TestHelpers.CreateCborContext(),
+            BaseUrl = baseUrl
+        });
     }
 
     [Fact]

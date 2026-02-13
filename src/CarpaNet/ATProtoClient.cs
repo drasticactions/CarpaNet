@@ -1,17 +1,14 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using CarpaNet.Auth;
-using CarpaNet.Cbor;
-using CarpaNet.EventStream;
 using CarpaNet.Http;
 using CarpaNet.Identity;
+using CarpaNet.Storage;
 
 namespace CarpaNet;
 
@@ -30,16 +27,15 @@ namespace CarpaNet;
 /// </remarks>
 public sealed class ATProtoClient : IATProtoClient, IDisposable
 {
-    private readonly HttpClient _httpClient;
+    private readonly ATProtoClientCore _core;
     private readonly bool _ownsHttpClient;
     private readonly ITokenProvider? _tokenProvider;
-    private readonly JsonSerializerOptions _jsonOptions;
-    private readonly CborSerializerContext _cborContext;
     private readonly bool _autoRetryOnAuthFailure;
+    private readonly Uri? _configuredBaseUrl;
     private bool _disposed;
 
     /// <inheritdoc/>
-    public Uri BaseUrl { get; }
+    public Uri BaseUrl => _configuredBaseUrl ?? _tokenProvider?.PdsUrl ?? new Uri(BlueskyServices.PublicAppView);
 
     /// <inheritdoc/>
     public bool IsAuthenticated => _tokenProvider?.HasValidToken ?? false;
@@ -59,6 +55,115 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     /// Gets the token provider, if any.
     /// </summary>
     public ITokenProvider? TokenProvider => _tokenProvider;
+
+    /// <summary>
+    /// Gets the handle of the authenticated user, if using session-based authentication.
+    /// </summary>
+    public string? Handle => (_tokenProvider as SessionTokenProvider)?.Handle;
+
+    #region Session Lifecycle
+
+    /// <summary>
+    /// Authenticates with the ATProtocol service using credentials.
+    /// Only works when the client was created with a <see cref="SessionTokenProvider"/>.
+    /// </summary>
+    /// <param name="identifier">The user identifier (handle, email, or DID).</param>
+    /// <param name="password">The password or App Password.</param>
+    /// <param name="serviceUrl">The service URL (default: Bluesky Entryway).</param>
+    /// <param name="authFactorToken">Optional 2FA token.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The session response with user info.</returns>
+    public Task<SessionResponse> LoginAsync(
+        string identifier,
+        string password,
+        Uri? serviceUrl = null,
+        string? authFactorToken = null,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var sessionProvider = GetSessionTokenProvider();
+        return sessionProvider.LoginAsync(identifier, password, serviceUrl, authFactorToken, cancellationToken);
+    }
+
+    /// <summary>
+    /// Restores a session from stored tokens.
+    /// Only works when the client was created with a <see cref="SessionTokenProvider"/>.
+    /// </summary>
+    /// <param name="accessJwt">The stored access JWT.</param>
+    /// <param name="refreshJwt">The stored refresh JWT.</param>
+    /// <param name="did">The user's DID.</param>
+    /// <param name="handle">The user's handle.</param>
+    /// <param name="pdsUrl">The PDS URL.</param>
+    public void RestoreSession(string accessJwt, string refreshJwt, string did, string? handle, Uri pdsUrl)
+    {
+        ThrowIfDisposed();
+        var sessionProvider = GetSessionTokenProvider();
+        sessionProvider.RestoreSession(accessJwt, refreshJwt, did, handle, pdsUrl);
+    }
+
+    /// <summary>
+    /// Restores a session from the session store by DID.
+    /// Requires a session store to be configured on the <see cref="SessionTokenProvider"/>.
+    /// </summary>
+    /// <param name="sub">The user's DID (subject).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if the session was restored, false if no stored session was found.</returns>
+    public Task<bool> RestoreSessionAsync(string sub, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var sessionProvider = GetSessionTokenProvider();
+        return sessionProvider.RestoreSessionAsync(sub, cancellationToken);
+    }
+
+    /// <summary>
+    /// Logs out and clears the current session.
+    /// Optionally deletes the session on the server.
+    /// Only works when the client was created with a <see cref="SessionTokenProvider"/>.
+    /// </summary>
+    /// <param name="deleteOnServer">Whether to call deleteSession on the server.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task LogoutAsync(bool deleteOnServer = true, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var sessionProvider = GetSessionTokenProvider();
+
+        if (deleteOnServer && sessionProvider.HasValidToken && sessionProvider.PdsUrl != null)
+        {
+            try
+            {
+                var token = await sessionProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+                if (!string.IsNullOrEmpty(token))
+                {
+                    var url = XrpcHttpHandler.BuildUrl(sessionProvider.PdsUrl, "com.atproto.server.deleteSession");
+                    using var request = new HttpRequestMessage(HttpMethod.Post, url);
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+                    // Fire and forget - don't throw if delete fails
+                    await _core.HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                // Ignore errors when deleting session
+            }
+        }
+
+        await sessionProvider.ClearSessionAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private SessionTokenProvider GetSessionTokenProvider()
+    {
+        if (_tokenProvider is SessionTokenProvider sessionProvider)
+        {
+            return sessionProvider;
+        }
+
+        throw new InvalidOperationException(
+            "Session lifecycle methods require a SessionTokenProvider. " +
+            "Use CreateWithSessionAsync or provide a SessionTokenProvider in options.");
+    }
+
+    #endregion
 
     #region Factory Methods
 
@@ -103,7 +208,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         }
 
         // Create session token provider and login
-        var tokenProvider = new SessionTokenProvider(httpClient);
+        var tokenProvider = new SessionTokenProvider(httpClient, sessionStore: options.SessionStore);
         try
         {
             await tokenProvider.LoginAsync(identifier, password, serviceUrl, cancellationToken: cancellationToken)
@@ -156,10 +261,35 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
             httpClient.Timeout = options.Timeout.Value;
         }
 
-        var tokenProvider = new SessionTokenProvider(httpClient);
+        var tokenProvider = new SessionTokenProvider(httpClient, sessionStore: options.SessionStore);
         tokenProvider.RestoreSession(accessJwt, refreshJwt, did, handle, pdsUrl);
 
         options.BaseUrl = pdsUrl;
+        options.TokenProvider = tokenProvider;
+        options.HttpClient = httpClient;
+
+        return new ATProtoClient(options, ownsHttpClient, ownsTokenProvider: true);
+    }
+
+    /// <summary>
+    /// Creates an unauthenticated client configured with a session store for later login via <see cref="LoginAsync"/>.
+    /// </summary>
+    /// <param name="options">Configuration options. Must include <see cref="ATProtoClientOptions.SessionStore"/>.</param>
+    /// <returns>An unauthenticated ATProtoClient ready for <see cref="LoginAsync"/>.</returns>
+    public static ATProtoClient CreateWithSessionStore(ATProtoClientOptions options)
+    {
+        if (options == null) throw new ArgumentNullException(nameof(options));
+        options = options.Clone();
+
+        var httpClient = options.HttpClient ?? new HttpClient();
+        var ownsHttpClient = options.HttpClient == null;
+
+        if (options.Timeout.HasValue)
+        {
+            httpClient.Timeout = options.Timeout.Value;
+        }
+
+        var tokenProvider = new SessionTokenProvider(httpClient, sessionStore: options.SessionStore);
         options.TokenProvider = tokenProvider;
         options.HttpClient = httpClient;
 
@@ -184,24 +314,24 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         if (options == null)
             throw new ArgumentNullException(nameof(options));
 
-        _httpClient = options.HttpClient ?? new HttpClient();
+        var httpClient = options.HttpClient ?? new HttpClient();
         _ownsHttpClient = ownsHttpClient;
 
         if (options.Timeout.HasValue && ownsHttpClient)
         {
-            _httpClient.Timeout = options.Timeout.Value;
+            httpClient.Timeout = options.Timeout.Value;
         }
 
+        var jsonOptions = options.JsonOptions ?? throw new ArgumentException("JsonOptions must be provided.", nameof(options));
+        var cborContext = options.CborContext ?? throw new ArgumentException("CborContext must be provided.", nameof(options));
+
+        _core = new ATProtoClientCore(httpClient, jsonOptions, cborContext);
         _tokenProvider = options.TokenProvider;
-        _jsonOptions = options.JsonOptions ?? throw new ArgumentException("JsonOptions must be provided.", nameof(options));
-        _cborContext = options.CborContext ?? throw new ArgumentException("CborContext must be provided.", nameof(options));
         _autoRetryOnAuthFailure = options.AutoRetryOnAuthFailure;
         LabelerDids = options.LabelerDids;
 
-        // Determine base URL
-        BaseUrl = options.BaseUrl
-            ?? _tokenProvider?.PdsUrl
-            ?? new Uri(BlueskyServices.PublicAppView);
+        // Store configured base URL (null means dynamic - will use token provider's PDS URL)
+        _configuredBaseUrl = options.BaseUrl ?? _tokenProvider?.PdsUrl;
 
         // Create or use identity resolver
         if (options.IdentityResolver != null)
@@ -210,15 +340,10 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         }
         else if (options.CreateIdentityResolver)
         {
-            IdentityResolver = new IdentityResolver(_httpClient);
+            IdentityResolver = new IdentityResolver(httpClient);
         }
 
-        // If we own the token provider, subscribe to refresh events
-        if (ownsTokenProvider && _tokenProvider is SessionTokenProvider sessionProvider)
-        {
-            // Store for cleanup
-            _ownsTokenProvider = true;
-        }
+        _ownsTokenProvider = ownsTokenProvider;
     }
 
     private readonly bool _ownsTokenProvider;
@@ -235,12 +360,12 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid, parameters);
-        using var request = XrpcHttpHandler.CreateGetRequest(url, proxyServiceDid: null, LabelerDids);
+        var url = _core.BuildUrl(BaseUrl, nsid, parameters);
+        using var request = _core.CreateGetRequest(url, proxyServiceDid: null, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
         var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
+        return await _core.ProcessResponseAsync<TOutput>(response, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -252,12 +377,12 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid, parameters);
-        using var request = XrpcHttpHandler.CreateGetRequest(url, proxyServiceDid, LabelerDids);
+        var url = _core.BuildUrl(BaseUrl, nsid, parameters);
+        using var request = _core.CreateGetRequest(url, proxyServiceDid, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
         var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
+        return await _core.ProcessResponseAsync<TOutput>(response, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -275,12 +400,12 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
                 "Use CreateWithSessionAsync or provide a TokenProvider.");
         }
 
-        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid);
-        using var request = XrpcHttpHandler.CreatePostRequest(url, input, _jsonOptions, proxyServiceDid: null, LabelerDids);
+        var url = _core.BuildUrl(BaseUrl, nsid);
+        using var request = _core.CreatePostRequest(url, input, proxyServiceDid: null, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
         var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
+        return await _core.ProcessResponseAsync<TOutput>(response, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -299,12 +424,12 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
                 "Use CreateWithSessionAsync or provide a TokenProvider.");
         }
 
-        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid);
-        using var request = XrpcHttpHandler.CreatePostRequest(url, input, _jsonOptions, proxyServiceDid, LabelerDids);
+        var url = _core.BuildUrl(BaseUrl, nsid);
+        using var request = _core.CreatePostRequest(url, input, proxyServiceDid, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
         var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
+        return await _core.ProcessResponseAsync<TOutput>(response, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -315,23 +440,9 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var eventStreamClient = new EventStreamClient(BaseUrl, _cborContext);
-        try
+        await foreach (var message in _core.SubscribeAsync<TMessage>(BaseUrl, nsid, parameters, cancellationToken).ConfigureAwait(false))
         {
-            var paramList = parameters != null
-                ? new List<KeyValuePair<string, string?>>(
-                    ((IEnumerable<KeyValuePair<string, string>>)parameters)
-                        .Select(kvp => new KeyValuePair<string, string?>(kvp.Key, kvp.Value)))
-                : null;
-
-            await foreach (var message in eventStreamClient.SubscribeAsync<TMessage>(nsid, paramList, cancellationToken).ConfigureAwait(false))
-            {
-                yield return message;
-            }
-        }
-        finally
-        {
-            eventStreamClient.Dispose();
+            yield return message;
         }
     }
 
@@ -355,7 +466,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
-        var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var response = await _core.HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
         // Retry on 401 if auto-retry is enabled and we have a token provider
         if (_autoRetryOnAuthFailure &&
@@ -367,11 +478,11 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
                 await _tokenProvider.RefreshAsync(cancellationToken).ConfigureAwait(false);
 
                 // Create a new request and retry
-                using var retryRequest = CloneRequest(request);
+                using var retryRequest = ATProtoClientCore.CloneRequest(request, "Authorization");
                 await AddAuthHeaderAsync(retryRequest, cancellationToken).ConfigureAwait(false);
 
                 response.Dispose();
-                return await _httpClient.SendAsync(retryRequest, cancellationToken).ConfigureAwait(false);
+                return await _core.HttpClient.SendAsync(retryRequest, cancellationToken).ConfigureAwait(false);
             }
             catch (AuthenticationException)
             {
@@ -384,32 +495,6 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         }
 
         return response;
-    }
-
-    private static HttpRequestMessage CloneRequest(HttpRequestMessage original)
-    {
-        var clone = new HttpRequestMessage(original.Method, original.RequestUri);
-
-        foreach (var header in original.Headers)
-        {
-            if (!header.Key.Equals("Authorization", StringComparison.OrdinalIgnoreCase))
-            {
-                clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
-            }
-        }
-
-        if (original.Content != null)
-        {
-            var contentBytes = original.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
-            clone.Content = new ByteArrayContent(contentBytes);
-
-            foreach (var header in original.Content.Headers)
-            {
-                clone.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
-            }
-        }
-
-        return clone;
     }
 
     private void ThrowIfDisposed()
@@ -441,7 +526,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
 
         if (_ownsHttpClient)
         {
-            _httpClient.Dispose();
+            _core.HttpClient.Dispose();
 
             // Also dispose identity resolver if we created it
             IdentityResolver?.Dispose();

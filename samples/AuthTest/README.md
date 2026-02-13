@@ -25,7 +25,7 @@ dotnet publish samples/AuthTest -c Release
 
 I wrote this as a way to test auth and perform basic Bluesky functions, to verify they work. When starting the app, you'll get a menu of auth choices:
 
-1. **Password (App Password)** — Logs in via `ATProtoSessionClient.LoginAsync` using an app password. Demonstrates session creation and optional persistence to disk.
+1. **Password (App Password)** — Logs in via `ATProtoClient.LoginAsync` using an app password. Demonstrates session creation and optional persistence to disk.
 2. **OAuth (Localhost)** — Runs a full OAuth 2.0 flow using `OAuthSession`. Spins up a local HTTP listener, opens the browser for authorization, and exchanges the callback code for tokens. Sessions are automatically persisted via a file-backed `IOAuthSessionStore`.
 3. **Restore Password Session** — Restores a previously saved password session from disk and refreshes the tokens.
 4. **Restore OAuth Session** — Restores a previously saved OAuth session using `OAuthSession.RestoreSessionAsync`.
@@ -60,7 +60,7 @@ The `.csproj` shows how a consumer project wires up CarpaNet with the source gen
 <LexiconFiles Include="$(ATPROTO_LEXICON)\**\*.json" />
 ```
 
-The generated `ATProtoClientFactory` (from the source generator) creates clients with the correct JSON and CBOR contexts pre-configured, so you can call `ATProtoClientFactory.CreateSessionClient()` without manual setup.
+The generated `ATProtoClientFactory` (from the source generator) creates clients with the correct JSON and CBOR contexts pre-configured, so you can call `ATProtoClientFactory.CreateSessionClient()` to get an `ATProtoClient` ready for `LoginAsync()` without manual setup.
 
 ## Session Storage
 

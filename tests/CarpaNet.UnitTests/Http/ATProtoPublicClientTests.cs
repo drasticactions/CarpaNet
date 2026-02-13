@@ -16,14 +16,16 @@ namespace CarpaNet.UnitTests.Http;
 
 public class ATProtoPublicClientTests
 {
-    private static ATProtoPublicClient CreateClient(HttpClient? httpClient = null, Uri? baseUrl = null, IReadOnlyList<string>? labelerDids = null)
+    private static ATProtoClient CreateClient(HttpClient? httpClient = null, Uri? baseUrl = null, IReadOnlyList<string>? labelerDids = null)
     {
-        return new ATProtoPublicClient(
-            httpClient ?? new HttpClient(),
-            TestHelpers.CreateJsonOptions(),
-            TestHelpers.CreateCborContext(),
-            baseUrl,
-            labelerDids: labelerDids);
+        return ATProtoClient.CreatePublic(new ATProtoClientOptions
+        {
+            HttpClient = httpClient,
+            JsonOptions = TestHelpers.CreateJsonOptions(),
+            CborContext = TestHelpers.CreateCborContext(),
+            BaseUrl = baseUrl,
+            LabelerDids = labelerDids
+        });
     }
 
     [Fact]
@@ -34,19 +36,6 @@ public class ATProtoPublicClientTests
         Assert.Equal(new Uri(BlueskyServices.PublicAppView), client.BaseUrl);
         Assert.False(client.IsAuthenticated);
         Assert.Null(client.AuthenticatedDid);
-    }
-
-    [Fact]
-    public void Constructor_WithHttpClient_DoesNotOwnHttpClient()
-    {
-        var httpClient = new HttpClient();
-        using var client = CreateClient(httpClient);
-
-        // Client should not dispose HttpClient
-        client.Dispose();
-
-        // This should not throw - httpClient is still usable
-        Assert.Equal(new Uri(BlueskyServices.PublicAppView), client.BaseUrl);
     }
 
     [Fact]

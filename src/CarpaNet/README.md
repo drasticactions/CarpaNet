@@ -18,13 +18,12 @@ All clients implement `IATProtoClient`, which provides `GetAsync`, `PostAsync`, 
 
 ### ATProtoClient
 
-Full-featured client with pluggable authentication via `ITokenProvider`. Supports auto-retry on auth failure and rate limiting.
+The unified client for interacting with ATProtocol services. Supports public (unauthenticated) access, session-based authentication (App Passwords), and custom token providers. Includes auto-retry on auth failure and rate limiting.
 
 ```csharp
 // Public (unauthenticated) access
-var client = new ATProtoClient(new ATProtoClientOptions
+var client = ATProtoClient.CreatePublic(new ATProtoClientOptions
 {
-    BaseUrl = new Uri("https://public.api.bsky.app"),
     JsonOptions = myJsonOptions,
     CborContext = myCborContext
 });
@@ -37,23 +36,15 @@ var client = await ATProtoClient.CreateWithSessionAsync(
         JsonOptions = myJsonOptions,
         CborContext = myCborContext
     });
-```
 
-### ATProtoSessionClient
-
-Session-based (app password) client with `LoginAsync`, `LogoutAsync`, and `RestoreSession`.
-
-```csharp
-var client = new ATProtoSessionClient(httpClient, jsonOptions, cborContext);
+// Session lifecycle (login/logout/restore)
+var client = ATProtoClient.CreateWithSessionStore(new ATProtoClientOptions
+{
+    JsonOptions = myJsonOptions,
+    CborContext = myCborContext,
+    SessionStore = mySessionStore
+});
 var session = await client.LoginAsync("myhandle.bsky.social", "my-app-password");
-```
-
-### ATProtoPublicClient
-
-Unauthenticated client for public read-only API access. POST methods throw `NotSupportedException`.
-
-```csharp
-var client = new ATProtoPublicClient(httpClient, jsonOptions, cborContext);
 ```
 
 ### ATProtoOAuthClient

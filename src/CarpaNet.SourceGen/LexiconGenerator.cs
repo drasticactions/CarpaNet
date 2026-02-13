@@ -1196,8 +1196,8 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         sb.AppendLine();
 
         // CreatePublicClient
-        sb.WriteSummary("Creates an ATProtoPublicClient with the generated serialization contexts.");
-        sb.AppendLine("public static ATProtoPublicClient CreatePublicClient(");
+        sb.WriteSummary("Creates an unauthenticated ATProtoClient with the generated serialization contexts.");
+        sb.AppendLine("public static ATProtoClient CreatePublicClient(");
         sb.Indent();
         sb.AppendLine("HttpClient? httpClient = null,");
         sb.AppendLine("Uri? baseUrl = null,");
@@ -1205,41 +1205,43 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         sb.AppendLine("IReadOnlyList<string>? labelerDids = null)");
         sb.Unindent();
         sb.OpenBrace();
-        sb.AppendLine("return new ATProtoPublicClient(");
-        sb.Indent();
-        sb.AppendLine("httpClient ?? new HttpClient(),");
-        sb.AppendLine("CreateJsonOptions(),");
-        sb.AppendLine($"global::{cborContextNs}.{options.CborContextName}.Default,");
-        sb.AppendLine("baseUrl,");
-        sb.AppendLine("identityResolver,");
-        sb.AppendLine("labelerDids);");
-        sb.Unindent();
+        sb.AppendLine("return ATProtoClient.CreatePublic(new ATProtoClientOptions");
+        sb.OpenBrace();
+        sb.AppendLine("HttpClient = httpClient,");
+        sb.AppendLine("JsonOptions = CreateJsonOptions(),");
+        sb.AppendLine($"CborContext = global::{cborContextNs}.{options.CborContextName}.Default,");
+        sb.AppendLine("BaseUrl = baseUrl,");
+        sb.AppendLine("IdentityResolver = identityResolver,");
+        sb.AppendLine("LabelerDids = labelerDids");
+        sb.CloseBrace();
+        sb.AppendLine(");");
         sb.CloseBrace();
         sb.AppendLine();
 
         // CreateSessionClient
-        sb.WriteSummary("Creates an ATProtoSessionClient with the generated serialization contexts.");
-        sb.AppendLine("public static ATProtoSessionClient CreateSessionClient(");
+        sb.WriteSummary("Creates an ATProtoClient configured for session-based authentication with the generated serialization contexts.");
+        sb.AppendLine("public static ATProtoClient CreateSessionClient(");
         sb.Indent();
         sb.AppendLine("HttpClient? httpClient = null,");
         sb.AppendLine("IdentityResolver? identityResolver = null,");
         sb.AppendLine("IReadOnlyList<string>? labelerDids = null)");
         sb.Unindent();
         sb.OpenBrace();
-        sb.AppendLine("return new ATProtoSessionClient(");
-        sb.Indent();
-        sb.AppendLine("httpClient ?? new HttpClient(),");
-        sb.AppendLine("CreateJsonOptions(),");
-        sb.AppendLine($"global::{cborContextNs}.{options.CborContextName}.Default,");
-        sb.AppendLine("identityResolver,");
-        sb.AppendLine("labelerDids);");
-        sb.Unindent();
+        sb.AppendLine("return ATProtoClient.CreateWithSessionStore(new ATProtoClientOptions");
+        sb.OpenBrace();
+        sb.AppendLine("HttpClient = httpClient,");
+        sb.AppendLine("JsonOptions = CreateJsonOptions(),");
+        sb.AppendLine($"CborContext = global::{cborContextNs}.{options.CborContextName}.Default,");
+        sb.AppendLine("IdentityResolver = identityResolver,");
+        sb.AppendLine("LabelerDids = labelerDids");
+        sb.CloseBrace();
+        sb.AppendLine(");");
         sb.CloseBrace();
         sb.AppendLine();
 
         // CreateSessionClient with ISessionStore
-        sb.WriteSummary("Creates an ATProtoSessionClient with the generated serialization contexts and a session store for automatic persistence.");
-        sb.AppendLine("public static ATProtoSessionClient CreateSessionClient(");
+        sb.WriteSummary("Creates an ATProtoClient configured for session-based authentication with the generated serialization contexts and a session store for automatic persistence.");
+        sb.AppendLine("public static ATProtoClient CreateSessionClient(");
         sb.Indent();
         sb.AppendLine("ISessionStore sessionStore,");
         sb.AppendLine("HttpClient? httpClient = null,");
@@ -1247,15 +1249,16 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         sb.AppendLine("IReadOnlyList<string>? labelerDids = null)");
         sb.Unindent();
         sb.OpenBrace();
-        sb.AppendLine("return new ATProtoSessionClient(");
-        sb.Indent();
-        sb.AppendLine("httpClient ?? new HttpClient(),");
-        sb.AppendLine("CreateJsonOptions(),");
-        sb.AppendLine($"global::{cborContextNs}.{options.CborContextName}.Default,");
-        sb.AppendLine("identityResolver,");
-        sb.AppendLine("labelerDids,");
-        sb.AppendLine("sessionStore);");
-        sb.Unindent();
+        sb.AppendLine("return ATProtoClient.CreateWithSessionStore(new ATProtoClientOptions");
+        sb.OpenBrace();
+        sb.AppendLine("HttpClient = httpClient,");
+        sb.AppendLine("JsonOptions = CreateJsonOptions(),");
+        sb.AppendLine($"CborContext = global::{cborContextNs}.{options.CborContextName}.Default,");
+        sb.AppendLine("IdentityResolver = identityResolver,");
+        sb.AppendLine("LabelerDids = labelerDids,");
+        sb.AppendLine("SessionStore = sessionStore");
+        sb.CloseBrace();
+        sb.AppendLine(");");
         sb.CloseBrace();
 
         sb.CloseBrace(); // class

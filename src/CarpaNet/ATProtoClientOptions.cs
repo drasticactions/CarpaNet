@@ -6,6 +6,7 @@ using CarpaNet.Auth;
 using CarpaNet.Cbor;
 using CarpaNet.Http;
 using CarpaNet.Identity;
+using CarpaNet.Storage;
 
 namespace CarpaNet;
 
@@ -101,6 +102,12 @@ public sealed class ATProtoClientOptions
     public string? UserAgent { get; set; }
 
     /// <summary>
+    /// Gets or sets the session store for automatic persistence of password-based sessions.
+    /// Used by <see cref="ATProtoClient.CreateWithSessionAsync"/> and session lifecycle methods.
+    /// </summary>
+    public ISessionStore? SessionStore { get; set; }
+
+    /// <summary>
     /// Creates a copy of these options.
     /// </summary>
     /// <returns>A new ATProtoClientOptions instance with the same values.</returns>
@@ -121,7 +128,8 @@ public sealed class ATProtoClientOptions
             EnableRateLimitHandler = EnableRateLimitHandler,
             AutoRetryOnRateLimit = AutoRetryOnRateLimit,
             RateLimitMaxRetries = RateLimitMaxRetries,
-            UserAgent = UserAgent
+            UserAgent = UserAgent,
+            SessionStore = SessionStore
         };
     }
 }

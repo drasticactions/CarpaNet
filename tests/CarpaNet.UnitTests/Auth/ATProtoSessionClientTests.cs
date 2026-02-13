@@ -18,12 +18,14 @@ public class ATProtoSessionClientTests
     // Sample JWT with exp claim (expires 2030-01-01 00:00:00 UTC)
     private const string SampleJwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkaWQ6cGxjOnRlc3QiLCJleHAiOjE4OTM0NTYwMDB9.signature";
 
-    private static ATProtoSessionClient CreateClient(HttpClient? httpClient = null)
+    private static ATProtoClient CreateClient(HttpClient? httpClient = null)
     {
-        return new ATProtoSessionClient(
-            httpClient ?? new HttpClient(),
-            TestHelpers.CreateJsonOptions(),
-            TestHelpers.CreateCborContext());
+        return ATProtoClient.CreateWithSessionStore(new ATProtoClientOptions
+        {
+            HttpClient = httpClient,
+            JsonOptions = TestHelpers.CreateJsonOptions(),
+            CborContext = TestHelpers.CreateCborContext()
+        });
     }
 
     [Fact]
@@ -34,24 +36,6 @@ public class ATProtoSessionClientTests
         Assert.False(client.IsAuthenticated);
         Assert.Null(client.AuthenticatedDid);
         Assert.Null(client.Handle);
-    }
-
-    [Fact]
-    public async Task GetAsync_BeforeLogin_ThrowsInvalidOperationException()
-    {
-        using var client = CreateClient();
-
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => client.GetAsync<object>("app.bsky.feed.getTimeline"));
-    }
-
-    [Fact]
-    public async Task PostAsync_BeforeLogin_ThrowsInvalidOperationException()
-    {
-        using var client = CreateClient();
-
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => client.PostAsync<object, object>("com.atproto.repo.createRecord", new { }));
     }
 
     [Fact]
@@ -204,7 +188,6 @@ public class ATProtoSessionClientTests
         Assert.True(client.IsAuthenticated);
         Assert.Equal("did:plc:test", client.AuthenticatedDid);
         Assert.Equal("alice.bsky.social", client.Handle);
-        Assert.Equal(pdsUrl, client.BaseUrl);
     }
 
     [Fact]
@@ -271,7 +254,7 @@ public class ATProtoSessionClientTests
 }
 
 /// <summary>
-/// Integration tests for ATProtoSessionClient.
+/// Integration tests for ATProtoClient session lifecycle.
 /// Set BLUESKY_TEST_HANDLE and BLUESKY_TEST_PASSWORD environment variables to run.
 /// </summary>
 public class ATProtoSessionClientIntegrationTests
@@ -287,12 +270,14 @@ public class ATProtoSessionClientIntegrationTests
 
     private bool CanRunIntegrationTests => !string.IsNullOrEmpty(_testHandle) && !string.IsNullOrEmpty(_testPassword);
 
-    private static ATProtoSessionClient CreateClient(HttpClient? httpClient = null)
+    private static ATProtoClient CreateClient(HttpClient? httpClient = null)
     {
-        return new ATProtoSessionClient(
-            httpClient ?? new HttpClient(),
-            TestHelpers.CreateJsonOptions(),
-            TestHelpers.CreateCborContext());
+        return ATProtoClient.CreateWithSessionStore(new ATProtoClientOptions
+        {
+            HttpClient = httpClient,
+            JsonOptions = TestHelpers.CreateJsonOptions(),
+            CborContext = TestHelpers.CreateCborContext()
+        });
     }
 
     [Fact]

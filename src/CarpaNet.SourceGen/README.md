@@ -94,7 +94,7 @@ A `CborSerializerContext` that registers converters for all generated types, use
 
 ### Client factory (`ATProtoClientFactory.g.cs`)
 
-A convenience factory class in the `CarpaNet` namespace that creates pre-configured `ATProtoClient`, `ATProtoSessionClient`, and `ATProtoPublicClient` instances with the generated JSON and CBOR contexts already wired up.
+A convenience factory class in the `CarpaNet` namespace that creates pre-configured `ATProtoClient` instances with the generated JSON and CBOR contexts already wired up.
 
 ```csharp
 using CarpaNet;

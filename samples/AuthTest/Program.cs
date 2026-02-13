@@ -79,7 +79,7 @@ async Task PasswordFlowAsync()
         Console.WriteLine($"Logged in as {session.Handle} ({session.Did})");
         Console.WriteLine("Session saved automatically.");
 
-        await AuthenticatedMenuAsync(client, session.Handle, session.Did);
+        await AuthenticatedMenuAsync(client, client.Handle, session.Did);
     }
     catch (Exception ex)
     {
@@ -193,7 +193,7 @@ async Task RestorePasswordSessionAsync()
         }
 
         // Refresh to verify the session is still valid
-        await client.TokenProvider.RefreshAsync();
+        await client.TokenProvider!.RefreshAsync();
         Console.WriteLine($"Session restored for {client.Handle} ({client.AuthenticatedDid})");
 
         await AuthenticatedMenuAsync(client, client.Handle, client.AuthenticatedDid!);
@@ -430,19 +430,18 @@ async Task DeletePostAsync(IATProtoClient client, string did)
 
 async Task ShowSessionTokensAsync(IATProtoClient client)
 {
-    if (client is ATProtoSessionClient sessionClient)
+    if (client is ATProtoClient atClient && atClient.TokenProvider is CarpaNet.Auth.SessionTokenProvider stp)
     {
-        var tp = sessionClient.TokenProvider;
-        Console.WriteLine($"  DID: {tp.CurrentDid}");
-        Console.WriteLine($"  Handle: {tp.Handle}");
-        Console.WriteLine($"  PDS URL: {tp.PdsUrl}");
-        Console.WriteLine($"  Has Valid Token: {tp.HasValidToken}");
-        Console.WriteLine($"  Access JWT: {tp.AccessJwt}");
-        Console.WriteLine($"  Refresh JWT: {tp.RefreshJwt}");
-        if (tp.AccessExpiry != default)
+        Console.WriteLine($"  DID: {stp.CurrentDid}");
+        Console.WriteLine($"  Handle: {stp.Handle}");
+        Console.WriteLine($"  PDS URL: {stp.PdsUrl}");
+        Console.WriteLine($"  Has Valid Token: {stp.HasValidToken}");
+        Console.WriteLine($"  Access JWT: {stp.AccessJwt}");
+        Console.WriteLine($"  Refresh JWT: {stp.RefreshJwt}");
+        if (stp.AccessExpiry != default)
         {
-            var remaining = tp.AccessExpiry - DateTimeOffset.UtcNow;
-            Console.WriteLine($"  Expires At: {tp.AccessExpiry:u}");
+            var remaining = stp.AccessExpiry - DateTimeOffset.UtcNow;
+            Console.WriteLine($"  Expires At: {stp.AccessExpiry:u}");
             Console.WriteLine($"  Expires In: {(remaining > TimeSpan.Zero ? remaining.ToString(@"hh\:mm\:ss") : "expired")}");
         }
     }
@@ -471,16 +470,9 @@ async Task ShowSessionTokensAsync(IATProtoClient client)
     }
 }
 
-void SaveCurrentSession(IATProtoClient client)
+void SaveCurrentSession(IATProtoClient _)
 {
-    if (client is ATProtoSessionClient)
-    {
-        Console.WriteLine("Password sessions are saved automatically.");
-    }
-    else
-    {
-        Console.WriteLine("OAuth sessions are saved automatically.");
-    }
+    Console.WriteLine("Sessions are saved automatically.");
 }
 
 // --- Session persistence helpers ---

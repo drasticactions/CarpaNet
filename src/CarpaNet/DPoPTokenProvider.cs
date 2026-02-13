@@ -250,6 +250,37 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
     }
 
     /// <summary>
+    /// Adds DPoP proof and authorization headers to an existing HTTP request.
+    /// </summary>
+    /// <param name="request">The HTTP request to add headers to.</param>
+    /// <param name="includeAccessToken">Whether to include the access token.</param>
+    public void AddDPoPHeaders(HttpRequestMessage request, bool includeAccessToken = true)
+    {
+        ThrowIfDisposed();
+
+        if (_dpopKey == null)
+        {
+            throw new InvalidOperationException("No DPoP key available.");
+        }
+
+        var url = request.RequestUri!.ToString();
+        var nonce = _nonceCache.Get(url);
+        var accessToken = includeAccessToken ? _tokenSet?.AccessToken : null;
+        var proof = _dpopKey.CreateProof(request.Method.Method, url, nonce, accessToken);
+
+        // Remove existing DPoP headers before adding new ones
+        request.Headers.Remove("DPoP");
+        request.Headers.Remove("Authorization");
+
+        request.Headers.Add("DPoP", proof);
+
+        if (includeAccessToken && !string.IsNullOrEmpty(accessToken))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("DPoP", accessToken);
+        }
+    }
+
+    /// <summary>
     /// Creates a DPoP-signed HTTP request.
     /// </summary>
     /// <param name="method">The HTTP method.</param>
