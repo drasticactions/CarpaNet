@@ -124,23 +124,4 @@ public sealed class ATProtoClientOptions
             UserAgent = UserAgent
         };
     }
-
-    /// <summary>
-    /// Creates an optimized HttpClient configured for ATProtocol.
-    /// Uses connection pooling, HTTP/2, and optionally rate limit handling.
-    /// </summary>
-    /// <returns>An optimized HttpClient.</returns>
-    public HttpClient CreateOptimizedHttpClient()
-    {
-        var factoryOptions = new HttpClientFactoryOptions
-        {
-            Timeout = Timeout,
-            UserAgent = UserAgent,
-            EnableRateLimitHandler = EnableRateLimitHandler,
-            AutoRetryOnRateLimit = AutoRetryOnRateLimit,
-            RateLimitMaxRetries = RateLimitMaxRetries
-        };
-
-        return HttpClientFactory.Create(factoryOptions);
-    }
 }

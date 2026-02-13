@@ -271,7 +271,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
 
         if (_sessionStore != null && !string.IsNullOrEmpty(did))
         {
-            await _sessionStore.DeleteAsync(did, cancellationToken).ConfigureAwait(false);
+            await _sessionStore.DeleteAsync(did!, cancellationToken).ConfigureAwait(false);
         }
     }
 

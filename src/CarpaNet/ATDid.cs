@@ -54,7 +54,7 @@ public readonly struct ATDid : IEquatable<ATDid>
             throw new ArgumentNullException(nameof(uri));
         }
 
-        return DIDValidator.EnsureValidDid(uri);
+        return DIDValidator.EnsureValidDid(uri!);
     }
 
     public bool Equals(ATDid other) => Value == other.Value;
