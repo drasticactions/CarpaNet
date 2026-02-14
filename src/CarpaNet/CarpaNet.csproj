@@ -14,7 +14,6 @@
   <ItemGroup>
     <PackageReference Include="System.Formats.Cbor" />
     <PackageReference Include="System.Text.Json" />
-    <PackageReference Include="ZstdSharp.Port" />
   </ItemGroup>
 
   <ItemGroup Condition=" ('$(IsPackable)' == 'true') or ('$(PackAsTool)' == 'true') ">

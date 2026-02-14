@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/CarpaNet.Jetstream/CarpaNet.Jetstream.csproj" />
     <ProjectReference Include="..\..\src\CarpaNet\CarpaNet.csproj" />
   </ItemGroup>
 
