@@ -20,7 +20,7 @@ public class ATProtoSessionClientTests
 
     private static ATProtoClient CreateClient(HttpClient? httpClient = null)
     {
-        return ATProtoClient.CreateWithSessionStore(new ATProtoClientOptions
+        return ATProtoClient.Create(new ATProtoClientOptions
         {
             HttpClient = httpClient,
             JsonOptions = TestHelpers.CreateJsonOptions(),
@@ -272,7 +272,7 @@ public class ATProtoSessionClientIntegrationTests
 
     private static ATProtoClient CreateClient(HttpClient? httpClient = null)
     {
-        return ATProtoClient.CreateWithSessionStore(new ATProtoClientOptions
+        return ATProtoClient.Create(new ATProtoClientOptions
         {
             HttpClient = httpClient,
             JsonOptions = TestHelpers.CreateJsonOptions(),

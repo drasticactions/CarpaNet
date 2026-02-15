@@ -1227,7 +1227,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         sb.AppendLine("IReadOnlyList<string>? labelerDids = null)");
         sb.Unindent();
         sb.OpenBrace();
-        sb.AppendLine("return ATProtoClient.CreateWithSessionStore(new ATProtoClientOptions");
+        sb.AppendLine("return ATProtoClient.Create(new ATProtoClientOptions");
         sb.OpenBrace();
         sb.AppendLine("HttpClient = httpClient,");
         sb.AppendLine("JsonOptions = CreateJsonOptions(),");
@@ -1249,7 +1249,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         sb.AppendLine("IReadOnlyList<string>? labelerDids = null)");
         sb.Unindent();
         sb.OpenBrace();
-        sb.AppendLine("return ATProtoClient.CreateWithSessionStore(new ATProtoClientOptions");
+        sb.AppendLine("return ATProtoClient.Create(new ATProtoClientOptions");
         sb.OpenBrace();
         sb.AppendLine("HttpClient = httpClient,");
         sb.AppendLine("JsonOptions = CreateJsonOptions(),");

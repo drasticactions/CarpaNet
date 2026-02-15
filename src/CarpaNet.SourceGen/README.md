@@ -16,7 +16,7 @@ dotnet add package CarpaNet.SourceGen
 
 ### 1. Reference both packages
 
-Your project needs a reference to `CarpaNet` (runtime) and `CarpaNet.SourceGen` (analyzer):
+In order to use this, tour project needs a reference to `CarpaNet` and the `CarpaNet.SourceGen`:
 
 ```xml
 <ItemGroup>
@@ -26,6 +26,9 @@ Your project needs a reference to `CarpaNet` (runtime) and `CarpaNet.SourceGen` 
                     ReferenceOutputAssembly="false" />
 </ItemGroup>
 ```
+
+CarpaNet.SourceGen generates types that include CarpaNet, so it will complain if you don't have it.
+
 
 ### 2. Import the MSBuild targets (If using from source)
 
@@ -44,6 +47,8 @@ Point `LexiconFiles` to your ATProtocol Lexicon JSON files:
   <LexiconFiles Include="path/to/lexicons/**/*.json" />
 </ItemGroup>
 ```
+
+This will generate the types based on the lexicon files. You can include multiple entries, the source gen will consolidate them down, although you should try and limit the amount you generate to what your program or library needs.
 
 ## MSBuild Properties
 

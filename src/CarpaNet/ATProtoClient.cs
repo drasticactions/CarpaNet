@@ -282,7 +282,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     /// </summary>
     /// <param name="options">Configuration options. Must include <see cref="ATProtoClientOptions.SessionStore"/>.</param>
     /// <returns>An unauthenticated ATProtoClient ready for <see cref="LoginAsync"/>.</returns>
-    public static ATProtoClient CreateWithSessionStore(ATProtoClientOptions options)
+    public static ATProtoClient Create(ATProtoClientOptions options)
     {
         if (options == null) throw new ArgumentNullException(nameof(options));
         options = options.Clone();

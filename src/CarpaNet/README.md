@@ -4,7 +4,7 @@
 
 ![CarpaNet Logo](https://user-images.githubusercontent.com/898335/253740405-4b0ae177-cc49-4c26-b6b0-ab8e835a0e62.png)
 
-CarpaNet is the core .NET runtime library for interacting with [ATProtocol](https://atproto.com). It provides ATProtocol primitives, HTTP clients, OAuth support, identity resolution, CBOR serialization, event streams, and repo reading. 
+CarpaNet is the core .NET runtime library for interacting with [ATProtocol](https://atproto.com). It provides ATProtocol primitives, HTTP clients, OAuth support (Via CarpaNet.OAuth), identity resolution, CBOR serialization, event streams, Jetstream support (Via CarpaNet.Jetstream) and repo reading. 
 
 ## Installation
 
@@ -12,13 +12,15 @@ CarpaNet is the core .NET runtime library for interacting with [ATProtocol](http
 dotnet add package CarpaNet
 ```
 
-## Clients
+By itself, CarpaNet does **not** provide bindings to any ATProtocol lexicons. You can either write them yourself or use `CarpaNet.SourceGen` to create bound objects.
 
-All clients implement `IATProtoClient`, which provides `GetAsync`, `PostAsync`, and `SubscribeAsync` methods for XRPC calls. The source generator produces typed extension methods on `IATProtoClient` (e.g., `client.AppBskyFeedGetTimelineAsync()`), so any client works with the generated API surface.
+## IATProtoClient
+
+All clients implement `IATProtoClient`, which provides `GetAsync`, `PostAsync`, and `SubscribeAsync` methods for XRPC calls. The source generator produces typed extension methods on `IATProtoClient` (e.g., `client.AppBskyFeedGetTimelineAsync()`), so any client works with the generated API surface. You can either write your own implementation, or use the ones provided by `CarpaNet` or `CarpaNet.OAuth`.
 
 ### ATProtoClient
 
-The unified client for interacting with ATProtocol services. Supports public (unauthenticated) access, session-based authentication (App Passwords), and custom token providers. Includes auto-retry on auth failure and rate limiting.
+The provided implementation client for CarpaNet. Supports public (unauthenticated) access, session-based authentication (App Passwords), and custom token providers. Includes auto-retry on auth failure and rate limiting.
 
 ```csharp
 // Public (unauthenticated) access
@@ -38,7 +40,7 @@ var client = await ATProtoClient.CreateWithSessionAsync(
     });
 
 // Session lifecycle (login/logout/restore)
-var client = ATProtoClient.CreateWithSessionStore(new ATProtoClientOptions
+var client = ATProtoClient.Create(new ATProtoClientOptions
 {
     JsonOptions = myJsonOptions,
     CborContext = myCborContext,
