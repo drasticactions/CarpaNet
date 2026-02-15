@@ -235,6 +235,7 @@ public sealed class OAuthSession : IDisposable
                 tokenSet.Sub,
                 tokenSet.Audience,
                 tokenProvider,
+                this,
                 storedState.AppState,
                 _config.JsonOptions,
                 _config.LabelerDids);
@@ -278,6 +279,7 @@ public sealed class OAuthSession : IDisposable
             sub,
             tokenProvider.PdsUrl?.ToString() ?? string.Empty,
             tokenProvider,
+            this,
             null,
             _config.JsonOptions,
             _config.LabelerDids);

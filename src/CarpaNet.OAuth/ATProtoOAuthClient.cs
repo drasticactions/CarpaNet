@@ -22,6 +22,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly IdentityResolver? _identityResolver;
     private bool _disposed;
+    private readonly OAuthSession _session;
 
     /// <summary>
     /// Gets the user's DID.
@@ -67,6 +68,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         string did,
         string pdsUrl,
         DPoPTokenProvider tokenProvider,
+        OAuthSession session,
         string? appState,
         JsonSerializerOptions? jsonOptions = null,
         IReadOnlyList<string>? labelerDids = null)
@@ -74,6 +76,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         Did = did ?? throw new ArgumentNullException(nameof(did));
         BaseUrl = new Uri(pdsUrl);
         _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
+        _session = session ?? throw new ArgumentNullException(nameof(session));
         AppState = appState;
         LabelerDids = labelerDids;
         _httpClient = new HttpClient();
@@ -181,10 +184,10 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
     /// <summary>
     /// Signs out of the session.
     /// </summary>
-    public void SignOut()
+    public async Task SignOutAsync(CancellationToken cancellationToken = default)
     {
-        // The actual revocation should be done through OAuthSession.RevokeAsync
-        // This just marks the local session as invalid
+        ThrowIfDisposed();
+        await _session.RevokeAsync(Did, cancellationToken).ConfigureAwait(false);
         Dispose();
     }
 
