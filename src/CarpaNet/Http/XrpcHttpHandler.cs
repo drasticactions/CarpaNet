@@ -16,7 +16,7 @@ namespace CarpaNet.Http;
 /// Provides shared HTTP handling logic for XRPC requests.
 /// Handles URL building, response processing, and error handling.
 /// </summary>
-internal static class XrpcHttpHandler
+public static class XrpcHttpHandler
 {
     private const string XrpcPathPrefix = "/xrpc/";
     private const string ContentTypeJson = "application/json";

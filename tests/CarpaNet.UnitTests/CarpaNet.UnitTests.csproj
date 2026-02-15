@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/CarpaNet.OAuth/CarpaNet.OAuth.csproj" />
     <ProjectReference Include="..\..\src\CarpaNet\CarpaNet.csproj" />
     <ProjectReference Include="..\..\src\CarpaNet.SourceGen\CarpaNet.SourceGen.csproj" />
   </ItemGroup>

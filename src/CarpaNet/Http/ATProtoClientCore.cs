@@ -12,11 +12,11 @@ using CarpaNet.EventStream;
 namespace CarpaNet.Http;
 
 /// <summary>
-/// Internal helper that provides shared XRPC operations used by all IATProtoClient implementations.
+/// Helper that provides shared XRPC operations used by all IATProtoClient implementations.
 /// Handles URL building, request creation, response processing, subscribe flow, and request cloning.
 /// Auth injection and send-with-retry logic remain in each client.
 /// </summary>
-internal sealed class ATProtoClientCore
+public sealed class ATProtoClientCore
 {
     private readonly HttpClient _httpClient;
     private readonly JsonSerializerOptions _jsonOptions;

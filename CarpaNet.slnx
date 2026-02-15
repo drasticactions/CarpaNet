@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/CarpaNet.Jetstream/CarpaNet.Jetstream.csproj" />
+    <Project Path="src/CarpaNet.OAuth/CarpaNet.OAuth.csproj" />
     <Project Path="src/CarpaNet.SourceGen/CarpaNet.SourceGen.csproj" />
     <Project Path="src/CarpaNet/CarpaNet.csproj" />
   </Folder>
