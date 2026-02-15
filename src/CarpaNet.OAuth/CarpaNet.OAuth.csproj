@@ -25,4 +25,5 @@
       Visible="false" />
   </ItemGroup>
 
+  <Import Project="..\..\Version.props" />
 </Project>
