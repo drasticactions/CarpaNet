@@ -11,7 +11,7 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
 
     <PackageId>CarpaNet.SourceGen</PackageId>
-    <Description>SourceGen for ATProtocol Lexicon files, built for CarpaNet.</Description>
+    <Description>Generate bindings of ATProtocol Lexicon files for CarpaNet.</Description>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <DevelopmentDependency>true</DevelopmentDependency>
     <NoPackageAnalysis>true</NoPackageAnalysis>

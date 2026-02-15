@@ -8,7 +8,7 @@
     <IsAotCompatible>true</IsAotCompatible>
     <IsAotCompatible Condition="'$(TargetFramework)' == 'netstandard2.0'"></IsAotCompatible>
     <PackageId>CarpaNet.OAuth</PackageId>
-    <Description>.NET ATProtocol OAuth Library. So good it'll make you Flippy your Fish.</Description>
+    <Description>.NET ATProtocol OAuth Implementation Library for CarpaNet.</Description>
   </PropertyGroup>
 
   <ItemGroup>

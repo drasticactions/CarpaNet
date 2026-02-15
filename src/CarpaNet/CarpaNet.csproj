@@ -8,7 +8,7 @@
     <IsAotCompatible>true</IsAotCompatible>
     <IsAotCompatible Condition="'$(TargetFramework)' == 'netstandard2.0'"></IsAotCompatible>
     <PackageId>CarpaNet</PackageId>
-    <Description>.NET ATProtocol Library. So good it'll make you Flippy your Fish.</Description>
+    <Description>Thin .NET ATProtocol Library, built for bindings with source generators.</Description>
   </PropertyGroup>
 
   <ItemGroup>

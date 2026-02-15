@@ -5,6 +5,11 @@
     <Project Path="src/CarpaNet.SourceGen/CarpaNet.SourceGen.csproj" />
     <Project Path="src/CarpaNet/CarpaNet.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/AuthTest/AuthTest.csproj" />
+    <Project Path="samples/FirehoseTest/FirehoseTest.csproj" />
+    <Project Path="samples/JetstreamTest/JetstreamTest.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CarpaNet.UnitTests/CarpaNet.UnitTests.csproj" />
   </Folder>

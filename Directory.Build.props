@@ -17,6 +17,9 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SignAssembly>true</SignAssembly>
 		<AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)Key.snk</AssemblyOriginatorKeyFile>
+    <RepositoryUrl>https://github.com/drasticactions/carpanet</RepositoryUrl>
+		<PackageProjectUrl>https://github.com/drasticactions/carpanet</PackageProjectUrl>
+    <PackageTags>atproto atprotocol bluesky</PackageTags>
   </PropertyGroup>
 
   <ItemGroup Condition=" ('$(IsPackable)' == 'true') or ('$(PackAsTool)' == 'true') ">
