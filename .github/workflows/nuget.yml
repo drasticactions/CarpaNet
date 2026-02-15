@@ -1,0 +1,97 @@
+name: Build Package
+
+on:
+  push:
+    branches: [ "main", release-*, develop ]
+  pull_request:
+    branches: [ "main", release-*, develop ]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+          submodules: 'true'
+
+      - name: Setup .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build and Pack Nugets
+        run: dotnet pack src/CarpaNet.slnx --configuration Release --output nupkg
+        
+      - name: Upload Nuget
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: nupkg/*.nupkg
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'true'
+
+      - name: Setup .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Run CarpaNet.UnitTests
+        run: dotnet test tests/CarpaNet.UnitTests/CarpaNet.UnitTests.csproj -- --report-trx --results-directory ../../dotnet-test-results
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-test-results
+          path: dotnet-test-results
+        if: ${{ always() }}
+  check-changes:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -E "^src/|^tests/|^Directory\.(Build|Packages)\.props$"; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+  publish:
+    needs: [build, test, check-changes]
+    runs-on: ubuntu-latest
+    if: needs.check-changes.outputs.changed == 'true'
+
+    steps:
+      - name: Download Nuget Package
+        uses: actions/download-artifact@v4
+        with:
+          name: nupkg
+          path: nupkg
+
+      - name: Setup .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.x
+
+      - name: Publish to NuGet
+        run: |
+          for f in ./nupkg/*.nupkg
+          do
+            dotnet nuget push $f --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+          done
