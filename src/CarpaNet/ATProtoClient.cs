@@ -1,11 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using CarpaNet.Auth;
+using CarpaNet.Cbor;
+using CarpaNet.EventStream;
 using CarpaNet.Http;
 using CarpaNet.Identity;
 using CarpaNet.Storage;
@@ -27,7 +31,9 @@ namespace CarpaNet;
 /// </remarks>
 public sealed class ATProtoClient : IATProtoClient, IDisposable
 {
-    private readonly ATProtoClientCore _core;
+    private readonly HttpClient _httpClient;
+    private readonly JsonSerializerOptions _jsonOptions;
+    private readonly CborSerializerContext _cborContext;
     private readonly bool _ownsHttpClient;
     private readonly ITokenProvider? _tokenProvider;
     private readonly bool _autoRetryOnAuthFailure;
@@ -139,7 +145,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
                     // Fire and forget - don't throw if delete fails
-                    await _core.HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                    await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
                 }
             }
             catch
@@ -325,7 +331,9 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         var jsonOptions = options.JsonOptions ?? throw new ArgumentException("JsonOptions must be provided.", nameof(options));
         var cborContext = options.CborContext ?? throw new ArgumentException("CborContext must be provided.", nameof(options));
 
-        _core = new ATProtoClientCore(httpClient, jsonOptions, cborContext);
+        _httpClient = httpClient;
+        _jsonOptions = jsonOptions;
+        _cborContext = cborContext;
         _tokenProvider = options.TokenProvider;
         _autoRetryOnAuthFailure = options.AutoRetryOnAuthFailure;
         LabelerDids = options.LabelerDids;
@@ -360,12 +368,12 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var url = _core.BuildUrl(BaseUrl, nsid, parameters);
-        using var request = _core.CreateGetRequest(url, proxyServiceDid: null, LabelerDids);
+        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid, parameters);
+        using var request = XrpcHttpHandler.CreateGetRequest(url, proxyServiceDid: null, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
         var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await _core.ProcessResponseAsync<TOutput>(response, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -377,12 +385,12 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var url = _core.BuildUrl(BaseUrl, nsid, parameters);
-        using var request = _core.CreateGetRequest(url, proxyServiceDid, LabelerDids);
+        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid, parameters);
+        using var request = XrpcHttpHandler.CreateGetRequest(url, proxyServiceDid, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
         var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await _core.ProcessResponseAsync<TOutput>(response, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -400,12 +408,12 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
                 "Use CreateWithSessionAsync or provide a TokenProvider.");
         }
 
-        var url = _core.BuildUrl(BaseUrl, nsid);
-        using var request = _core.CreatePostRequest(url, input, proxyServiceDid: null, LabelerDids);
+        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid);
+        using var request = XrpcHttpHandler.CreatePostRequest(url, input, _jsonOptions, proxyServiceDid: null, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
         var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await _core.ProcessResponseAsync<TOutput>(response, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -424,12 +432,12 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
                 "Use CreateWithSessionAsync or provide a TokenProvider.");
         }
 
-        var url = _core.BuildUrl(BaseUrl, nsid);
-        using var request = _core.CreatePostRequest(url, input, proxyServiceDid, LabelerDids);
+        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid);
+        using var request = XrpcHttpHandler.CreatePostRequest(url, input, _jsonOptions, proxyServiceDid, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
         var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await _core.ProcessResponseAsync<TOutput>(response, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -440,9 +448,22 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        await foreach (var message in _core.SubscribeAsync<TMessage>(BaseUrl, nsid, parameters, cancellationToken).ConfigureAwait(false))
+        var eventStreamClient = new EventStreamClient(BaseUrl, _cborContext);
+        try
         {
-            yield return message;
+            var paramList = parameters != null
+                ? new List<KeyValuePair<string, string?>>(
+                    parameters.Select(kvp => new KeyValuePair<string, string?>(kvp.Key, kvp.Value)))
+                : null;
+
+            await foreach (var message in eventStreamClient.SubscribeAsync<TMessage>(nsid, paramList, cancellationToken).ConfigureAwait(false))
+            {
+                yield return message;
+            }
+        }
+        finally
+        {
+            eventStreamClient.Dispose();
         }
     }
 
@@ -466,7 +487,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
-        var response = await _core.HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
         // Retry on 401 if auto-retry is enabled and we have a token provider
         if (_autoRetryOnAuthFailure &&
@@ -478,11 +499,11 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
                 await _tokenProvider.RefreshAsync(cancellationToken).ConfigureAwait(false);
 
                 // Create a new request and retry
-                using var retryRequest = ATProtoClientCore.CloneRequest(request, "Authorization");
+                using var retryRequest = XrpcHttpHandler.CloneRequest(request, "Authorization");
                 await AddAuthHeaderAsync(retryRequest, cancellationToken).ConfigureAwait(false);
 
                 response.Dispose();
-                return await _core.HttpClient.SendAsync(retryRequest, cancellationToken).ConfigureAwait(false);
+                return await _httpClient.SendAsync(retryRequest, cancellationToken).ConfigureAwait(false);
             }
             catch (AuthenticationException)
             {
@@ -526,7 +547,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
 
         if (_ownsHttpClient)
         {
-            _core.HttpClient.Dispose();
+            _httpClient.Dispose();
 
             // Also dispose identity resolver if we created it
             IdentityResolver?.Dispose();

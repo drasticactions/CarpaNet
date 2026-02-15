@@ -67,7 +67,7 @@ public sealed class ATProtoBearerAuthHandler : DelegatingHandler
             {
                 await _tokenProvider.RefreshAsync(cancellationToken).ConfigureAwait(false);
 
-                using var retryRequest = ATProtoClientCore.CloneRequest(request, "Authorization");
+                using var retryRequest = XrpcHttpHandler.CloneRequest(request, "Authorization");
                 token = await _tokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
                 if (!string.IsNullOrEmpty(token))
                 {

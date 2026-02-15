@@ -265,4 +265,44 @@ public static class XrpcHttpHandler
             _ => $"Request failed with status code {(int)statusCode}"
         };
     }
+
+    /// <summary>
+    /// Clones an HTTP request message, optionally skipping specified headers.
+    /// Used for 401 retry flows where the original request cannot be reused.
+    /// </summary>
+    public static HttpRequestMessage CloneRequest(HttpRequestMessage original, params string[] skipHeaders)
+    {
+        var clone = new HttpRequestMessage(original.Method, original.RequestUri);
+
+        foreach (var header in original.Headers)
+        {
+            var shouldSkip = false;
+            for (var i = 0; i < skipHeaders.Length; i++)
+            {
+                if (header.Key.Equals(skipHeaders[i], StringComparison.OrdinalIgnoreCase))
+                {
+                    shouldSkip = true;
+                    break;
+                }
+            }
+
+            if (!shouldSkip)
+            {
+                clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+        }
+
+        if (original.Content != null)
+        {
+            var contentBytes = original.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+            clone.Content = new ByteArrayContent(contentBytes);
+
+            foreach (var header in original.Content.Headers)
+            {
+                clone.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+        }
+
+        return clone;
+    }
 }

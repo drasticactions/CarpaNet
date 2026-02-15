@@ -63,7 +63,7 @@ public sealed class ATProtoDPoPAuthHandler : DelegatingHandler
             await _tokenProvider.RefreshAsync(cancellationToken).ConfigureAwait(false);
 
             // Clone request and add fresh DPoP headers
-            using var retryRequest = ATProtoClientCore.CloneRequest(request, "Authorization", "DPoP");
+            using var retryRequest = XrpcHttpHandler.CloneRequest(request, "Authorization", "DPoP");
             _tokenProvider.AddDPoPHeaders(retryRequest);
 
             // Copy custom headers (e.g., atproto-proxy)
