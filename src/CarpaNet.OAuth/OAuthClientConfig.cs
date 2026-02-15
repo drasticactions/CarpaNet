@@ -66,6 +66,12 @@ public sealed class OAuthClientConfig
     public JsonSerializerOptions? JsonOptions { get; set; }
 
     /// <summary>
+    /// Gets or sets the list of labeler DIDs whose labels should be included in responses.
+    /// When set, the atproto-accept-labelers header is added to requests.
+    /// </summary>
+    public IReadOnlyList<string>? LabelerDids { get; set; }
+
+    /// <summary>
     /// Creates a loopback client ID for native/desktop applications.
     /// </summary>
     /// <param name="port">The local port for the callback server.</param>

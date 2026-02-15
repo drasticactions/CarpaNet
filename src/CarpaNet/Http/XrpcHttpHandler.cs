@@ -128,7 +128,7 @@ public static class XrpcHttpHandler
     /// <summary>
     /// Adds common XRPC headers to a request.
     /// </summary>
-    private static void AddCommonHeaders(
+    public static void AddCommonHeaders(
         HttpRequestMessage request,
         string? proxyServiceDid,
         IEnumerable<string>? labelerDids)

@@ -51,6 +51,12 @@ public interface IATProtoClient
     IdentityResolver? IdentityResolver { get; }
 
     /// <summary>
+    /// Gets the list of labeler DIDs whose labels should be included in responses.
+    /// When set, the atproto-accept-labelers header is added to requests.
+    /// </summary>
+    IReadOnlyList<string>? LabelerDids { get; }
+
+    /// <summary>
     /// Performs an XRPC GET request (query).
     /// </summary>
     /// <typeparam name="TOutput">The expected output type.</typeparam>

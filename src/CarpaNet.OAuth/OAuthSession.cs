@@ -236,7 +236,8 @@ public sealed class OAuthSession : IDisposable
                 tokenSet.Audience,
                 tokenProvider,
                 storedState.AppState,
-                _config.JsonOptions);
+                _config.JsonOptions,
+                _config.LabelerDids);
         }
         catch
         {
@@ -278,7 +279,8 @@ public sealed class OAuthSession : IDisposable
             tokenProvider.PdsUrl?.ToString() ?? string.Empty,
             tokenProvider,
             null,
-            _config.JsonOptions);
+            _config.JsonOptions,
+            _config.LabelerDids);
     }
 
     /// <summary>

@@ -58,17 +58,24 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
     /// </summary>
     public IdentityResolver? IdentityResolver => _identityResolver;
 
+    /// <summary>
+    /// Gets the list of labeler DIDs whose labels should be included in responses.
+    /// </summary>
+    public IReadOnlyList<string>? LabelerDids { get; }
+
     internal ATProtoOAuthClient(
         string did,
         string pdsUrl,
         DPoPTokenProvider tokenProvider,
         string? appState,
-        JsonSerializerOptions? jsonOptions = null)
+        JsonSerializerOptions? jsonOptions = null,
+        IReadOnlyList<string>? labelerDids = null)
     {
         Did = did ?? throw new ArgumentNullException(nameof(did));
         BaseUrl = new Uri(pdsUrl);
         _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         AppState = appState;
+        LabelerDids = labelerDids;
         _httpClient = new HttpClient();
         _identityResolver = new IdentityResolver(_httpClient);
         _jsonOptions = jsonOptions ?? new JsonSerializerOptions
@@ -88,6 +95,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
 
         var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid, parameters).ToString();
         using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Get, url);
+        XrpcHttpHandler.AddCommonHeaders(request, null, LabelerDids);
 
         var response = await SendWithRetryAsync(request, url, cancellationToken).ConfigureAwait(false);
         return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
@@ -104,7 +112,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
 
         var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid, parameters).ToString();
         using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Get, url);
-        request.Headers.Add("atproto-proxy", proxyServiceDid);
+        XrpcHttpHandler.AddCommonHeaders(request, proxyServiceDid, LabelerDids);
 
         var response = await SendWithRetryAsync(request, url, cancellationToken).ConfigureAwait(false);
         return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
@@ -120,6 +128,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
 
         var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid).ToString();
         using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Post, url);
+        XrpcHttpHandler.AddCommonHeaders(request, null, LabelerDids);
 
         if (input != null)
         {
@@ -143,7 +152,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
 
         var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid).ToString();
         using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Post, url);
-        request.Headers.Add("atproto-proxy", proxyServiceDid);
+        XrpcHttpHandler.AddCommonHeaders(request, proxyServiceDid, LabelerDids);
 
         if (input != null)
         {

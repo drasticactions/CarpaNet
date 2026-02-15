@@ -409,6 +409,7 @@ public class ATProtoClientExtensionsTests
         public bool IsAuthenticated { get; set; }
         public string? AuthenticatedDid { get; set; }
         public IdentityResolver? IdentityResolver { get; set; }
+        public IReadOnlyList<string>? LabelerDids { get; set; }
 
         public Task<TOutput> GetAsync<TOutput>(string nsid, IReadOnlyDictionary<string, string>? parameters = null, CancellationToken cancellationToken = default)
             => throw new NotImplementedException();
