@@ -24,7 +24,7 @@ jobs:
           global-json-file: global.json
 
       - name: Build and Pack Nugets
-        run: dotnet pack src/CarpaNet.slnx --configuration Release --output nupkg
+        run: dotnet pack CarpaNet.slnx --configuration Release --output nupkg
         
       - name: Upload Nuget
         uses: actions/upload-artifact@v4
