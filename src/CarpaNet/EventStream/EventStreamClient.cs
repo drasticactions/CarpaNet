@@ -7,6 +7,8 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using CarpaNet.Cbor;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CarpaNet.EventStream;
 
@@ -18,6 +20,7 @@ public sealed class EventStreamClient : IDisposable
 {
     private readonly Uri _baseUri;
     private readonly CborSerializerContext _context;
+    private readonly ILogger<EventStreamClient> _logger;
 
     private ClientWebSocket? _webSocket;
     private bool _disposed;
@@ -31,8 +34,9 @@ public sealed class EventStreamClient : IDisposable
     /// Creates a new EventStreamClient with the default serializer context.
     /// </summary>
     /// <param name="baseUri">The base WebSocket URI (e.g., wss://bsky.network).</param>
-    public EventStreamClient(Uri baseUri)
-        : this(baseUri, CborSerializerContext.Default)
+    /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
+    public EventStreamClient(Uri baseUri, ILoggerFactory? loggerFactory = null)
+        : this(baseUri, CborSerializerContext.Default, loggerFactory)
     {
     }
 
@@ -41,10 +45,12 @@ public sealed class EventStreamClient : IDisposable
     /// </summary>
     /// <param name="baseUri">The base WebSocket URI (e.g., wss://bsky.network).</param>
     /// <param name="context">The serializer context with registered types.</param>
-    public EventStreamClient(Uri baseUri, CborSerializerContext context)
+    /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
+    public EventStreamClient(Uri baseUri, CborSerializerContext context, ILoggerFactory? loggerFactory = null)
     {
         _baseUri = baseUri ?? throw new ArgumentNullException(nameof(baseUri));
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<EventStreamClient>();
     }
 
     /// <summary>
@@ -63,16 +69,19 @@ public sealed class EventStreamClient : IDisposable
         ThrowIfDisposed();
 
         var uri = BuildWebSocketUri(nsid, parameters);
+        _logger.LogDebug("Subscribing to event stream at {Uri}", uri);
 
         _webSocket = new ClientWebSocket();
         try
         {
             await _webSocket.ConnectAsync(uri, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation("WebSocket connected to {Uri}", uri);
 
             await foreach (var frame in ReadFramesAsync(cancellationToken).ConfigureAwait(false))
             {
                 if (frame.Header.IsError)
                 {
+                    _logger.LogWarning("Event stream error frame received");
                     throw new EventStreamException(frame.Header);
                 }
 
@@ -124,6 +133,7 @@ public sealed class EventStreamClient : IDisposable
                 }
             }
 
+            _logger.LogDebug("WebSocket closed");
             _webSocket.Dispose();
             _webSocket = null;
         }

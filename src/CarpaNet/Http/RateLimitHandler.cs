@@ -3,6 +3,8 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CarpaNet.Http;
 
@@ -13,6 +15,7 @@ namespace CarpaNet.Http;
 public sealed class RateLimitHandler : DelegatingHandler
 {
     private static readonly Random Random = new Random();
+    private readonly ILogger<RateLimitHandler> _logger;
 
     /// <summary>
     /// Gets or sets whether to automatically retry on rate limit responses.
@@ -53,17 +56,21 @@ public sealed class RateLimitHandler : DelegatingHandler
     /// <summary>
     /// Creates a new RateLimitHandler with default settings.
     /// </summary>
-    public RateLimitHandler()
+    /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
+    public RateLimitHandler(ILoggerFactory? loggerFactory = null)
     {
+        _logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<RateLimitHandler>();
     }
 
     /// <summary>
     /// Creates a new RateLimitHandler with a specified inner handler.
     /// </summary>
     /// <param name="innerHandler">The inner handler.</param>
-    public RateLimitHandler(HttpMessageHandler innerHandler)
+    /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
+    public RateLimitHandler(HttpMessageHandler innerHandler, ILoggerFactory? loggerFactory = null)
         : base(innerHandler)
     {
+        _logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<RateLimitHandler>();
     }
 
     /// <inheritdoc/>
@@ -99,11 +106,15 @@ public sealed class RateLimitHandler : DelegatingHandler
             // Check if we should retry
             if (!AutoRetryOnRateLimit || attempt >= MaxRetries)
             {
+                _logger.LogWarning("Rate limit max retries exceeded");
                 return response;
             }
 
+            _logger.LogWarning("Rate limited (429) on attempt {Attempt}/{MaxRetries}", attempt, MaxRetries);
+
             // Calculate delay
             var delay = CalculateDelay(rateLimitInfo, attempt);
+            _logger.LogDebug("Rate limit retry after {DelayMs}ms", (int)delay.TotalMilliseconds);
 
             // Dispose the response before retrying
             response.Dispose();

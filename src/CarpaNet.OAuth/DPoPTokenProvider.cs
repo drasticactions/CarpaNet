@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using CarpaNet.OAuth.Crypto;
 using CarpaNet.OAuth.Storage;
 using CarpaNet.Auth;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CarpaNet.OAuth;
 
@@ -25,6 +27,7 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
     private readonly string? _redirectUri;
     private readonly string? _scope;
     private readonly SemaphoreSlim _refreshLock = new SemaphoreSlim(1, 1);
+    private readonly ILogger<DPoPTokenProvider> _logger;
 
     private string? _sub;
     private DPoPKeyPair? _dpopKey;
@@ -69,6 +72,7 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
     /// <param name="clientId">The OAuth client ID to include in token requests.</param>
     /// <param name="redirectUri">The OAuth redirect URI to persist with the session.</param>
     /// <param name="scope">The OAuth scope to persist with the session.</param>
+    /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
     public DPoPTokenProvider(
         HttpClient httpClient,
         IOAuthSessionStore sessionStore,
@@ -76,16 +80,18 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
         TimeSpan? refreshBuffer = null,
         string? clientId = null,
         string? redirectUri = null,
-        string? scope = null)
+        string? scope = null,
+        ILoggerFactory? loggerFactory = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _sessionStore = sessionStore ?? throw new ArgumentNullException(nameof(sessionStore));
-        _discovery = discovery ?? new AuthorizationServerDiscovery(httpClient);
+        _discovery = discovery ?? new AuthorizationServerDiscovery(httpClient, loggerFactory: loggerFactory);
         _nonceCache = new DPoPNonceCache();
         _refreshBuffer = refreshBuffer ?? TimeSpan.FromSeconds(30);
         _clientId = clientId;
         _redirectUri = redirectUri;
         _scope = scope;
+        _logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<DPoPTokenProvider>();
     }
 
     /// <summary>
@@ -101,6 +107,7 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
         var sessionData = await _sessionStore.GetAsync(sub, cancellationToken).ConfigureAwait(false);
         if (sessionData == null)
         {
+            _logger.LogWarning("No stored session found for {Did}", sub);
             return false;
         }
 
@@ -113,6 +120,7 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
             sessionData.TokenSet.Issuer,
             cancellationToken).ConfigureAwait(false);
 
+        _logger.LogDebug("DPoP session restored for {Did}", sub);
         return true;
     }
 
@@ -178,12 +186,14 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
             throw new InvalidOperationException("Session not properly initialized.");
         }
 
+        _logger.LogDebug("Refreshing DPoP token for {Sub}", _sub);
         await _refreshLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             // Double-check after acquiring lock
             if (HasValidToken)
             {
+                _logger.LogDebug("Token still valid after lock, skipping refresh");
                 return;
             }
 
@@ -228,6 +238,8 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
                 Scope = _scope
             }, cancellationToken).ConfigureAwait(false);
 
+            _logger.LogInformation("DPoP token refreshed for {Sub}", _sub);
+
             // Notify listeners
             TokenRefreshed?.Invoke(this, new TokenRefreshedEventArgs(
                 _tokenSet.AccessToken,
@@ -237,6 +249,7 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
         }
         catch (Exception ex)
         {
+            _logger.LogError("DPoP token refresh failed for {Sub}", _sub);
             throw new TokenRefreshException(
                 "refresh_failed",
                 ex.Message,
@@ -323,6 +336,7 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
             foreach (var nonce in values)
             {
                 _nonceCache.Set(url, nonce);
+                _logger.LogTrace("DPoP nonce updated for {Origin}", url);
                 break;
             }
         }
@@ -340,6 +354,7 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
         }
         catch (DPoPNonceException ex) when (!string.IsNullOrEmpty(ex.NewNonce))
         {
+            _logger.LogDebug("DPoP nonce retry required");
             // Store the new nonce and retry
             _nonceCache.Set(tokenEndpoint, ex.NewNonce!);
             return await ExecuteTokenRequestAsync(tokenEndpoint, formContent, cancellationToken).ConfigureAwait(false);
@@ -351,6 +366,7 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
         string formContent,
         CancellationToken cancellationToken)
     {
+        _logger.LogDebug("Executing token request to {Endpoint}", tokenEndpoint);
         using var request = CreateDPoPRequest(HttpMethod.Post, tokenEndpoint, includeAccessToken: false);
         request.Content = new StringContent(formContent, Encoding.UTF8, "application/x-www-form-urlencoded");
 

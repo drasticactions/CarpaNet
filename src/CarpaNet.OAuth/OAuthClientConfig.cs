@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text.Json;
 using CarpaNet.OAuth.Crypto;
 using CarpaNet.OAuth.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace CarpaNet.OAuth;
 
@@ -70,6 +71,12 @@ public sealed class OAuthClientConfig
     /// When set, the atproto-accept-labelers header is added to requests.
     /// </summary>
     public IReadOnlyList<string>? LabelerDids { get; set; }
+
+    /// <summary>
+    /// Gets or sets the logger factory for diagnostic logging.
+    /// When null, logging is disabled (NullLoggerFactory is used internally).
+    /// </summary>
+    public ILoggerFactory? LoggerFactory { get; set; }
 
     /// <summary>
     /// Creates a loopback client ID for native/desktop applications.

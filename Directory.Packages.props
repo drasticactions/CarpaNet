@@ -13,5 +13,7 @@
     <PackageVersion Include="coverlet.collector" Version="6.0.4"/>
     <PackageVersion Include="GitVersion.MSBuild" Version="6.5.1" />
     <PackageVersion Include="ZstdSharp.Port" Version="0.8.7" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.3" />
   </ItemGroup>
 </Project>

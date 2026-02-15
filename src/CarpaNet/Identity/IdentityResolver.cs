@@ -5,6 +5,8 @@ using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CarpaNet.Identity;
 
@@ -19,6 +21,7 @@ public sealed class IdentityResolver : IDisposable
     private readonly string _plcDirectoryUrl;
     private readonly IDnsResolver? _dnsResolver;
     private readonly IIdentityCache? _cache;
+    private readonly ILogger<IdentityResolver> _logger;
 
     /// <summary>
     /// Default PLC directory URL.
@@ -28,8 +31,9 @@ public sealed class IdentityResolver : IDisposable
     /// <summary>
     /// Creates a new IdentityResolver with default settings.
     /// </summary>
-    public IdentityResolver()
-        : this(new HttpClient(), ownsHttpClient: true, DefaultPlcDirectory, new DefaultDnsResolver(), null)
+    /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
+    public IdentityResolver(ILoggerFactory? loggerFactory = null)
+        : this(new HttpClient(), ownsHttpClient: true, DefaultPlcDirectory, new DefaultDnsResolver(), null, loggerFactory)
     {
     }
 
@@ -40,12 +44,14 @@ public sealed class IdentityResolver : IDisposable
     /// <param name="plcDirectoryUrl">The PLC directory URL (default: https://plc.directory).</param>
     /// <param name="dnsResolver">Optional custom DNS resolver for handle resolution.</param>
     /// <param name="cache">Optional identity cache for caching resolved identities.</param>
+    /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
     public IdentityResolver(
         HttpClient httpClient,
         string? plcDirectoryUrl = null,
         IDnsResolver? dnsResolver = null,
-        IIdentityCache? cache = null)
-        : this(httpClient, ownsHttpClient: false, plcDirectoryUrl ?? DefaultPlcDirectory, dnsResolver, cache)
+        IIdentityCache? cache = null,
+        ILoggerFactory? loggerFactory = null)
+        : this(httpClient, ownsHttpClient: false, plcDirectoryUrl ?? DefaultPlcDirectory, dnsResolver, cache, loggerFactory)
     {
     }
 
@@ -54,13 +60,15 @@ public sealed class IdentityResolver : IDisposable
         bool ownsHttpClient,
         string plcDirectoryUrl,
         IDnsResolver? dnsResolver,
-        IIdentityCache? cache)
+        IIdentityCache? cache,
+        ILoggerFactory? loggerFactory)
     {
         _httpClient = httpClient;
         _ownsHttpClient = ownsHttpClient;
         _plcDirectoryUrl = plcDirectoryUrl.TrimEnd('/');
         _dnsResolver = dnsResolver;
         _cache = cache;
+        _logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<IdentityResolver>();
     }
 
     /// <summary>
@@ -74,13 +82,15 @@ public sealed class IdentityResolver : IDisposable
     /// <param name="httpClient">Optional HttpClient to use for requests. If null, a new one will be created.</param>
     /// <param name="plcDirectoryUrl">The PLC directory URL (default: https://plc.directory).</param>
     /// <param name="dnsResolver">Optional custom DNS resolver for handle resolution.</param>
+    /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
     /// <returns>An IdentityResolver with caching enabled.</returns>
     public static IdentityResolver CreateWithCache(
         HttpClient? httpClient = null,
         string? plcDirectoryUrl = null,
-        IDnsResolver? dnsResolver = null)
+        IDnsResolver? dnsResolver = null,
+        ILoggerFactory? loggerFactory = null)
     {
-        return CreateWithCache(new MemoryIdentityCache(), httpClient, plcDirectoryUrl, dnsResolver);
+        return CreateWithCache(new MemoryIdentityCache(), httpClient, plcDirectoryUrl, dnsResolver, loggerFactory);
     }
 
     /// <summary>
@@ -90,12 +100,14 @@ public sealed class IdentityResolver : IDisposable
     /// <param name="httpClient">Optional HttpClient to use for requests. If null, a new one will be created.</param>
     /// <param name="plcDirectoryUrl">The PLC directory URL (default: https://plc.directory).</param>
     /// <param name="dnsResolver">Optional custom DNS resolver for handle resolution.</param>
+    /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
     /// <returns>An IdentityResolver with the specified cache.</returns>
     public static IdentityResolver CreateWithCache(
         IIdentityCache cache,
         HttpClient? httpClient = null,
         string? plcDirectoryUrl = null,
-        IDnsResolver? dnsResolver = null)
+        IDnsResolver? dnsResolver = null,
+        ILoggerFactory? loggerFactory = null)
     {
         if (cache == null)
             throw new ArgumentNullException(nameof(cache));
@@ -108,7 +120,8 @@ public sealed class IdentityResolver : IDisposable
             ownsHttpClient,
             plcDirectoryUrl ?? DefaultPlcDirectory,
             dnsResolver ?? new DefaultDnsResolver(),
-            cache);
+            cache,
+            loggerFactory);
     }
 
     /// <summary>
@@ -147,12 +160,14 @@ public sealed class IdentityResolver : IDisposable
         }
 
         // It's a handle - resolve to DID first
+        _logger.LogDebug("Resolving handle {Handle}", identifier);
         var did = await ResolveHandleAsync(identifier, skipCache, cancellationToken).ConfigureAwait(false);
         var doc = await ResolveDidAsync(did, skipCache, cancellationToken).ConfigureAwait(false);
 
         // Verify bidirectional link
         if (doc.Handle != null && !doc.Handle.Equals(identifier, StringComparison.OrdinalIgnoreCase))
         {
+            _logger.LogWarning("Bidirectional handle mismatch for {Handle}", identifier);
             throw new IdentityResolutionException(
                 $"Handle mismatch: resolved handle '{doc.Handle}' does not match '{identifier}'");
         }
@@ -191,7 +206,12 @@ public sealed class IdentityResolver : IDisposable
         {
             var cached = await _cache.GetDidDocumentAsync(did, cancellationToken).ConfigureAwait(false);
             if (cached != null)
+            {
+                _logger.LogTrace("Cache hit for {Key}", did);
                 return cached;
+            }
+
+            _logger.LogTrace("Cache miss for {Key}", did);
         }
 
         // Parse DID method
@@ -200,6 +220,7 @@ public sealed class IdentityResolver : IDisposable
             throw new ArgumentException("Invalid DID format: missing method", nameof(did));
 
         var method = did.Substring(4, colonIndex - 4).ToLowerInvariant();
+        _logger.LogDebug("Resolving DID {Did} via {Method}", did, method);
 
         var document = method switch
         {
@@ -237,6 +258,7 @@ public sealed class IdentityResolver : IDisposable
         }
         catch (HttpRequestException ex)
         {
+            _logger.LogWarning("Failed to resolve did:plc {Did}", did);
             throw new IdentityResolutionException($"Failed to resolve did:plc '{did}'", ex);
         }
     }
@@ -308,13 +330,19 @@ public sealed class IdentityResolver : IDisposable
         {
             var cachedDid = await _cache.GetHandleDidAsync(handle, cancellationToken).ConfigureAwait(false);
             if (cachedDid != null)
+            {
+                _logger.LogTrace("Cache hit for {Key}", handle);
                 return cachedDid;
+            }
+
+            _logger.LogTrace("Cache miss for {Key}", handle);
         }
 
         // Try DNS TXT first (preferred)
         var dnsDid = await TryResolveHandleDnsAsync(handle, cancellationToken).ConfigureAwait(false);
         if (!string.IsNullOrEmpty(dnsDid))
         {
+            _logger.LogDebug("DNS resolution found {Did} for {Handle}", dnsDid, handle);
             // Cache the result
             if (_cache != null)
             {
@@ -327,6 +355,7 @@ public sealed class IdentityResolver : IDisposable
         var httpsDid = await TryResolveHandleHttpsAsync(handle, cancellationToken).ConfigureAwait(false);
         if (!string.IsNullOrEmpty(httpsDid))
         {
+            _logger.LogDebug("HTTPS resolution found {Did} for {Handle}", httpsDid, handle);
             // Cache the result
             if (_cache != null)
             {
@@ -335,6 +364,7 @@ public sealed class IdentityResolver : IDisposable
             return httpsDid!;
         }
 
+        _logger.LogError("Failed to resolve handle {Handle}", handle);
         throw new IdentityResolutionException($"Failed to resolve handle '{handle}': no valid DID found");
     }
 

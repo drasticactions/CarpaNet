@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using System.Net.Http;
+using Microsoft.Extensions.Logging;
 
 namespace CarpaNet.Http;
 
@@ -102,7 +103,7 @@ public static class HttpClientFactory
         // Add rate limit handler if enabled
         if (options.EnableRateLimitHandler)
         {
-            var rateLimitHandler = new RateLimitHandler(handler)
+            var rateLimitHandler = new RateLimitHandler(handler, loggerFactory: options.LoggerFactory)
             {
                 AutoRetryOnRateLimit = options.AutoRetryOnRateLimit,
                 MaxRetries = options.RateLimitMaxRetries
@@ -186,4 +187,10 @@ public sealed class HttpClientFactoryOptions
     /// Default is 3.
     /// </summary>
     public int RateLimitMaxRetries { get; set; } = 3;
+
+    /// <summary>
+    /// Gets or sets the logger factory for diagnostic logging.
+    /// When null, logging is disabled.
+    /// </summary>
+    public ILoggerFactory? LoggerFactory { get; set; }
 }

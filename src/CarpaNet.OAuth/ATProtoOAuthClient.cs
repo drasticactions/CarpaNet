@@ -9,6 +9,8 @@ using CarpaNet;
 using CarpaNet.Auth;
 using CarpaNet.Http;
 using CarpaNet.Identity;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CarpaNet.OAuth;
 
@@ -21,6 +23,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
     private readonly HttpClient _httpClient;
     private readonly JsonSerializerOptions _jsonOptions;
     private readonly IdentityResolver? _identityResolver;
+    private readonly ILogger<ATProtoOAuthClient> _logger;
     private bool _disposed;
     private readonly OAuthSession _session;
 
@@ -71,7 +74,8 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         OAuthSession session,
         string? appState,
         JsonSerializerOptions? jsonOptions = null,
-        IReadOnlyList<string>? labelerDids = null)
+        IReadOnlyList<string>? labelerDids = null,
+        ILoggerFactory? loggerFactory = null)
     {
         Did = did ?? throw new ArgumentNullException(nameof(did));
         BaseUrl = new Uri(pdsUrl);
@@ -80,7 +84,9 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         AppState = appState;
         LabelerDids = labelerDids;
         _httpClient = new HttpClient();
-        _identityResolver = new IdentityResolver(_httpClient);
+        var factory = loggerFactory ?? NullLoggerFactory.Instance;
+        _logger = factory.CreateLogger<ATProtoOAuthClient>();
+        _identityResolver = new IdentityResolver(_httpClient, loggerFactory: factory);
         _jsonOptions = jsonOptions ?? new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -95,6 +101,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        _logger.LogDebug("OAuth GET {Nsid}", nsid);
 
         var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid, parameters).ToString();
         using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Get, url);
@@ -128,6 +135,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        _logger.LogDebug("OAuth POST {Nsid}", nsid);
 
         var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid).ToString();
         using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Post, url);
@@ -187,6 +195,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
     public async Task SignOutAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        _logger.LogInformation("Signing out OAuth session");
         await _session.RevokeAsync(Did, cancellationToken).ConfigureAwait(false);
         Dispose();
     }
@@ -202,6 +211,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         // Handle 401 with token refresh
         if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
         {
+            _logger.LogWarning("Received 401, refreshing DPoP token and retrying");
             // Try to refresh the token
             await _tokenProvider.RefreshAsync(cancellationToken).ConfigureAwait(false);
 

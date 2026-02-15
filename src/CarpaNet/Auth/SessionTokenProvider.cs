@@ -8,6 +8,8 @@ using CarpaNet.Http;
 using CarpaNet.Identity;
 using CarpaNet.Storage;
 using CarpaNet.Xrpc;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CarpaNet.Auth;
 
@@ -22,6 +24,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
     private readonly SemaphoreSlim _refreshLock = new SemaphoreSlim(1, 1);
     private readonly TimeSpan _refreshBuffer;
     private readonly ISessionStore? _sessionStore;
+    private readonly ILogger<SessionTokenProvider> _logger;
 
     private string? _accessJwt;
     private string? _refreshJwt;
@@ -69,8 +72,9 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
     /// </summary>
     /// <param name="refreshBuffer">Time before expiry to trigger proactive refresh (default: 30 seconds).</param>
     /// <param name="sessionStore">Optional session store for automatic persistence.</param>
-    public SessionTokenProvider(TimeSpan? refreshBuffer = null, ISessionStore? sessionStore = null)
-        : this(new HttpClient(), ownsHttpClient: true, refreshBuffer, sessionStore)
+    /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
+    public SessionTokenProvider(TimeSpan? refreshBuffer = null, ISessionStore? sessionStore = null, ILoggerFactory? loggerFactory = null)
+        : this(new HttpClient(), ownsHttpClient: true, refreshBuffer, sessionStore, loggerFactory)
     {
     }
 
@@ -80,17 +84,19 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
     /// <param name="httpClient">The HttpClient to use for auth requests.</param>
     /// <param name="refreshBuffer">Time before expiry to trigger proactive refresh (default: 30 seconds).</param>
     /// <param name="sessionStore">Optional session store for automatic persistence.</param>
-    public SessionTokenProvider(HttpClient httpClient, TimeSpan? refreshBuffer = null, ISessionStore? sessionStore = null)
-        : this(httpClient, ownsHttpClient: false, refreshBuffer, sessionStore)
+    /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
+    public SessionTokenProvider(HttpClient httpClient, TimeSpan? refreshBuffer = null, ISessionStore? sessionStore = null, ILoggerFactory? loggerFactory = null)
+        : this(httpClient, ownsHttpClient: false, refreshBuffer, sessionStore, loggerFactory)
     {
     }
 
-    private SessionTokenProvider(HttpClient httpClient, bool ownsHttpClient, TimeSpan? refreshBuffer, ISessionStore? sessionStore)
+    private SessionTokenProvider(HttpClient httpClient, bool ownsHttpClient, TimeSpan? refreshBuffer, ISessionStore? sessionStore, ILoggerFactory? loggerFactory)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _ownsHttpClient = ownsHttpClient;
         _refreshBuffer = refreshBuffer ?? TimeSpan.FromSeconds(30);
         _sessionStore = sessionStore;
+        _logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<SessionTokenProvider>();
     }
 
     /// <summary>
@@ -112,6 +118,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
         ThrowIfDisposed();
 
         serviceUrl ??= new Uri(BlueskyServices.Entryway);
+        _logger.LogInformation("Creating session for {Identifier} at {ServiceUrl}", identifier, serviceUrl);
 
         var request = new CreateSessionRequest
         {
@@ -151,6 +158,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
 
         // Store session data
         await UpdateSessionAsync(session, serviceUrl).ConfigureAwait(false);
+        _logger.LogInformation("Session created for {Did}", session.Did);
 
         return session;
     }
@@ -189,6 +197,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
         // Check if we need to refresh (with buffer before actual expiry)
         if (DateTimeOffset.UtcNow >= _accessExpiry - _refreshBuffer)
         {
+            _logger.LogDebug("Access token expiring, triggering refresh");
             await RefreshAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -212,6 +221,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
             // Double-check after acquiring lock
             if (HasValidToken)
             {
+                _logger.LogDebug("Token still valid after lock, skipping refresh");
                 return;
             }
 
@@ -223,6 +233,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
 
             if (!response.IsSuccessStatusCode)
             {
+                _logger.LogWarning("Session token refresh failed with HTTP {StatusCode}", (int)response.StatusCode);
                 await XrpcHttpHandler.ThrowForErrorResponseAsync(response, cancellationToken).ConfigureAwait(false);
             }
 
@@ -240,6 +251,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
             }
 
             await UpdateSessionAsync(session, _pdsUrl).ConfigureAwait(false);
+            _logger.LogInformation("Session token refreshed for {Did}", session.Did);
         }
         finally
         {

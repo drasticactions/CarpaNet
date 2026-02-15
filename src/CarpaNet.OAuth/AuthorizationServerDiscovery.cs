@@ -4,6 +4,8 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CarpaNet.OAuth;
 
@@ -16,6 +18,7 @@ public sealed class AuthorizationServerDiscovery : IDisposable
     private readonly bool _ownsHttpClient;
     private readonly TimeSpan _cacheTtl;
     private readonly ConcurrentDictionary<string, CachedMetadata> _cache = new();
+    private readonly ILogger<AuthorizationServerDiscovery> _logger;
     private bool _disposed;
 
     private sealed class CachedMetadata
@@ -28,8 +31,9 @@ public sealed class AuthorizationServerDiscovery : IDisposable
     /// Creates a new authorization server discovery client.
     /// </summary>
     /// <param name="cacheTtl">Cache time-to-live (default: 60 seconds).</param>
-    public AuthorizationServerDiscovery(TimeSpan? cacheTtl = null)
-        : this(new HttpClient(), ownsHttpClient: true, cacheTtl)
+    /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
+    public AuthorizationServerDiscovery(TimeSpan? cacheTtl = null, ILoggerFactory? loggerFactory = null)
+        : this(new HttpClient(), ownsHttpClient: true, cacheTtl, loggerFactory)
     {
     }
 
@@ -38,16 +42,18 @@ public sealed class AuthorizationServerDiscovery : IDisposable
     /// </summary>
     /// <param name="httpClient">The HttpClient to use.</param>
     /// <param name="cacheTtl">Cache time-to-live (default: 60 seconds).</param>
-    public AuthorizationServerDiscovery(HttpClient httpClient, TimeSpan? cacheTtl = null)
-        : this(httpClient, ownsHttpClient: false, cacheTtl)
+    /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
+    public AuthorizationServerDiscovery(HttpClient httpClient, TimeSpan? cacheTtl = null, ILoggerFactory? loggerFactory = null)
+        : this(httpClient, ownsHttpClient: false, cacheTtl, loggerFactory)
     {
     }
 
-    private AuthorizationServerDiscovery(HttpClient httpClient, bool ownsHttpClient, TimeSpan? cacheTtl)
+    private AuthorizationServerDiscovery(HttpClient httpClient, bool ownsHttpClient, TimeSpan? cacheTtl, ILoggerFactory? loggerFactory)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _ownsHttpClient = ownsHttpClient;
         _cacheTtl = cacheTtl ?? TimeSpan.FromSeconds(60);
+        _logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<AuthorizationServerDiscovery>();
     }
 
     /// <summary>
@@ -87,15 +93,18 @@ public sealed class AuthorizationServerDiscovery : IDisposable
         // Check cache
         if (_cache.TryGetValue(issuer, out var cached) && cached.ExpiresAt > DateTimeOffset.UtcNow)
         {
+            _logger.LogTrace("Authorization server metadata cache hit for {Issuer}", issuer);
             return cached.Metadata;
         }
 
         // Fetch metadata
         var wellKnownUrl = GetWellKnownUrl(issuer);
+        _logger.LogDebug("Fetching authorization server metadata from {Url}", wellKnownUrl);
         var response = await _httpClient.GetAsync(wellKnownUrl, cancellationToken).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
+            _logger.LogWarning("Failed to fetch server metadata from {Url}: HTTP {StatusCode}", wellKnownUrl, (int)response.StatusCode);
             throw new OAuthException(
                 "metadata_fetch_failed",
                 $"Failed to fetch authorization server metadata from {wellKnownUrl}: {response.StatusCode}");
@@ -114,6 +123,7 @@ public sealed class AuthorizationServerDiscovery : IDisposable
         // Validate issuer matches (mix-up attack prevention)
         if (!string.Equals(metadata.Issuer, issuer, StringComparison.OrdinalIgnoreCase))
         {
+            _logger.LogWarning("Issuer mismatch: expected {Expected}, got {Actual}", issuer, metadata.Issuer);
             throw new OAuthException(
                 "issuer_mismatch",
                 $"Authorization server metadata issuer '{metadata.Issuer}' does not match expected '{issuer}'.");
@@ -141,6 +151,7 @@ public sealed class AuthorizationServerDiscovery : IDisposable
     {
         ThrowIfDisposed();
 
+        _logger.LogDebug("Discovering authorization server for {ResourceUrl}", resourceUrl);
         var wellKnownUrl = GetProtectedResourceWellKnownUrl(resourceUrl);
         var response = await _httpClient.GetAsync(wellKnownUrl, cancellationToken).ConfigureAwait(false);
 

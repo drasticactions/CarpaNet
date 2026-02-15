@@ -13,6 +13,8 @@ using CarpaNet.EventStream;
 using CarpaNet.Http;
 using CarpaNet.Identity;
 using CarpaNet.Storage;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CarpaNet;
 
@@ -28,6 +30,8 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     private readonly ITokenProvider? _tokenProvider;
     private readonly bool _autoRetryOnAuthFailure;
     private readonly Uri? _configuredBaseUrl;
+    private readonly ILogger<ATProtoClient> _logger;
+    private readonly ILoggerFactory _loggerFactory;
     private bool _disposed;
 
     /// <inheritdoc/>
@@ -69,7 +73,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     /// <param name="authFactorToken">Optional 2FA token.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The session response with user info.</returns>
-    public Task<SessionResponse> LoginAsync(
+    public async Task<SessionResponse> LoginAsync(
         string identifier,
         string password,
         Uri? serviceUrl = null,
@@ -78,7 +82,9 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
         var sessionProvider = GetSessionTokenProvider();
-        return sessionProvider.LoginAsync(identifier, password, serviceUrl, authFactorToken, cancellationToken);
+        var response = await sessionProvider.LoginAsync(identifier, password, serviceUrl, authFactorToken, cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("Logged in as {Did}", response.Did);
+        return response;
     }
 
     /// <summary>
@@ -95,6 +101,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         ThrowIfDisposed();
         var sessionProvider = GetSessionTokenProvider();
         sessionProvider.RestoreSession(accessJwt, refreshJwt, did, handle, pdsUrl);
+        _logger.LogInformation("Session restored for {Did}", did);
     }
 
     /// <summary>
@@ -145,6 +152,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         }
 
         await sessionProvider.ClearSessionAsync(cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("Logged out");
     }
 
     private SessionTokenProvider GetSessionTokenProvider()
@@ -191,7 +199,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         }
 
         // Create session token provider and login
-        var tokenProvider = new SessionTokenProvider(httpClient, sessionStore: options.SessionStore);
+        var tokenProvider = new SessionTokenProvider(httpClient, sessionStore: options.SessionStore, loggerFactory: options.LoggerFactory);
         try
         {
             await tokenProvider.LoginAsync(identifier, password, serviceUrl, cancellationToken: cancellationToken)
@@ -244,7 +252,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
             httpClient.Timeout = options.Timeout.Value;
         }
 
-        var tokenProvider = new SessionTokenProvider(httpClient, sessionStore: options.SessionStore);
+        var tokenProvider = new SessionTokenProvider(httpClient, sessionStore: options.SessionStore, loggerFactory: options.LoggerFactory);
         tokenProvider.RestoreSession(accessJwt, refreshJwt, did, handle, pdsUrl);
 
         options.BaseUrl = pdsUrl;
@@ -274,7 +282,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
             httpClient.Timeout = options.Timeout.Value;
         }
 
-        var tokenProvider = new SessionTokenProvider(httpClient, sessionStore: options.SessionStore);
+        var tokenProvider = new SessionTokenProvider(httpClient, sessionStore: options.SessionStore, loggerFactory: options.LoggerFactory);
         options.TokenProvider = tokenProvider;
         options.HttpClient = httpClient;
 
@@ -298,6 +306,9 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     {
         if (options == null)
             throw new ArgumentNullException(nameof(options));
+
+        _loggerFactory = options.LoggerFactory ?? NullLoggerFactory.Instance;
+        _logger = _loggerFactory.CreateLogger<ATProtoClient>();
 
         var httpClient = options.HttpClient ?? new HttpClient();
         _ownsHttpClient = ownsHttpClient;
@@ -327,7 +338,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         }
         else if (options.CreateIdentityResolver)
         {
-            IdentityResolver = new IdentityResolver(httpClient);
+            IdentityResolver = new IdentityResolver(httpClient, loggerFactory: _loggerFactory);
         }
 
         _ownsTokenProvider = ownsTokenProvider;
@@ -346,9 +357,10 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        _logger.LogDebug("Sending GET {Nsid}", nsid);
 
         var url = XrpcHttpHandler.BuildUrl(this.TokenProvider?.PdsUrl ?? BaseUrl, nsid, parameters);
-        
+
         using var request = XrpcHttpHandler.CreateGetRequest(url, proxyServiceDid: null, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -380,6 +392,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        _logger.LogDebug("Sending POST {Nsid}", nsid);
 
         if (_tokenProvider == null)
         {
@@ -428,7 +441,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var eventStreamClient = new EventStreamClient(BaseUrl, _cborContext);
+        var eventStreamClient = new EventStreamClient(BaseUrl, _cborContext, _loggerFactory);
         try
         {
             var paramList = parameters != null
@@ -474,6 +487,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
             response.StatusCode == System.Net.HttpStatusCode.Unauthorized &&
             _tokenProvider != null)
         {
+            _logger.LogWarning("Received 401, refreshing token and retrying");
             try
             {
                 await _tokenProvider.RefreshAsync(cancellationToken).ConfigureAwait(false);
@@ -487,10 +501,12 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
             }
             catch (AuthenticationException)
             {
+                _logger.LogWarning("Token refresh failed, returning 401");
                 // Refresh failed, return original 401 response
             }
             catch (InvalidOperationException)
             {
+                _logger.LogWarning("Token refresh failed, returning 401");
                 // No refresh token available
             }
         }

@@ -7,6 +7,7 @@ using CarpaNet.Cbor;
 using CarpaNet.Http;
 using CarpaNet.Identity;
 using CarpaNet.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace CarpaNet;
 
@@ -109,6 +110,12 @@ public sealed class ATProtoClientOptions
     public ISessionStore SessionStore { get; set; } = new MemorySessionStore();
 
     /// <summary>
+    /// Gets or sets the logger factory for diagnostic logging.
+    /// When null, logging is disabled (NullLoggerFactory is used internally).
+    /// </summary>
+    public ILoggerFactory? LoggerFactory { get; set; }
+
+    /// <summary>
     /// Creates a copy of these options.
     /// </summary>
     /// <returns>A new ATProtoClientOptions instance with the same values.</returns>
@@ -130,7 +137,8 @@ public sealed class ATProtoClientOptions
             AutoRetryOnRateLimit = AutoRetryOnRateLimit,
             RateLimitMaxRetries = RateLimitMaxRetries,
             UserAgent = UserAgent,
-            SessionStore = SessionStore
+            SessionStore = SessionStore,
+            LoggerFactory = LoggerFactory
         };
     }
 }

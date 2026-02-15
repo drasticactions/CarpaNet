@@ -9,6 +9,8 @@ using CarpaNet.OAuth.Crypto;
 using CarpaNet.OAuth.Storage;
 using CarpaNet;
 using CarpaNet.Identity;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CarpaNet.OAuth;
 
@@ -24,6 +26,8 @@ public sealed class OAuthSession : IDisposable
     private readonly IOAuthSessionStore _sessionStore;
     private readonly AuthorizationServerDiscovery _discovery;
     private readonly IdentityResolver? _identityResolver;
+    private readonly ILogger<OAuthSession> _logger;
+    private readonly ILoggerFactory _loggerFactory;
     private bool _disposed;
 
     /// <summary>
@@ -34,13 +38,16 @@ public sealed class OAuthSession : IDisposable
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
 
+        _loggerFactory = config.LoggerFactory ?? NullLoggerFactory.Instance;
+        _logger = _loggerFactory.CreateLogger<OAuthSession>();
+
         _httpClient = config.HttpClient ?? new HttpClient();
         _ownsHttpClient = config.HttpClient == null;
 
         _stateStore = config.StateStore ?? new MemoryOAuthStateStore();
         _sessionStore = config.SessionStore ?? new MemoryOAuthSessionStore();
-        _discovery = new AuthorizationServerDiscovery(_httpClient);
-        _identityResolver = new IdentityResolver(_httpClient, dnsResolver: new CarpaNet.Identity.DefaultDnsResolver());
+        _discovery = new AuthorizationServerDiscovery(_httpClient, loggerFactory: _loggerFactory);
+        _identityResolver = new IdentityResolver(_httpClient, dnsResolver: new CarpaNet.Identity.DefaultDnsResolver(), loggerFactory: _loggerFactory);
     }
 
     /// <summary>
@@ -56,6 +63,7 @@ public sealed class OAuthSession : IDisposable
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        _logger.LogInformation("Starting OAuth authorization for {Input}", input);
 
         // Resolve identity to find PDS and authorization server
         var (pdsUrl, issuer, serverMetadata) = await ResolveIdentityAsync(input, cancellationToken).ConfigureAwait(false);
@@ -111,6 +119,7 @@ public sealed class OAuthSession : IDisposable
         // Try PAR if available
         if (!string.IsNullOrEmpty(serverMetadata.PushedAuthorizationRequestEndpoint))
         {
+            _logger.LogDebug("Attempting PAR");
             try
             {
                 var requestUri = await PushAuthorizationRequestAsync(
@@ -130,6 +139,7 @@ public sealed class OAuthSession : IDisposable
             }
             catch (OAuthException)
             {
+                _logger.LogWarning("PAR failed, falling back to standard URL");
                 // Fall back to standard authorization URL if PAR fails
             }
         }
@@ -157,6 +167,7 @@ public sealed class OAuthSession : IDisposable
         var error = query["error"];
         if (!string.IsNullOrEmpty(error))
         {
+            _logger.LogWarning("OAuth callback error: {Error}", error);
             var errorDescription = query["error_description"];
             var state = query["state"];
 
@@ -202,6 +213,7 @@ public sealed class OAuthSession : IDisposable
                 storedState.Issuer,
                 cancellationToken).ConfigureAwait(false);
 
+            _logger.LogDebug("Exchanging authorization code");
             // Exchange code for tokens
             var tokenSet = await ExchangeCodeAsync(
                 serverMetadata.TokenEndpoint,
@@ -221,7 +233,8 @@ public sealed class OAuthSession : IDisposable
                 _config.RefreshBuffer,
                 _config.ClientId,
                 _config.RedirectUri,
-                _config.Scope);
+                _config.Scope,
+                loggerFactory: _loggerFactory);
 
             await tokenProvider.SetupAsync(
                 tokenSet.Sub,
@@ -229,6 +242,8 @@ public sealed class OAuthSession : IDisposable
                 dpopKey,
                 serverMetadata,
                 cancellationToken).ConfigureAwait(false);
+
+            _logger.LogInformation("OAuth callback completed for {Did}", tokenSet.Sub);
 
             // Create session
             return new ATProtoOAuthClient(
@@ -238,7 +253,8 @@ public sealed class OAuthSession : IDisposable
                 this,
                 storedState.AppState,
                 _config.JsonOptions,
-                _config.LabelerDids);
+                _config.LabelerDids,
+                loggerFactory: _loggerFactory);
         }
         catch
         {
@@ -258,6 +274,7 @@ public sealed class OAuthSession : IDisposable
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        _logger.LogInformation("Restoring OAuth session for {Did}", sub);
 
         var tokenProvider = new DPoPTokenProvider(
             _httpClient,
@@ -266,7 +283,8 @@ public sealed class OAuthSession : IDisposable
             _config.RefreshBuffer,
             _config.ClientId,
             _config.RedirectUri,
-            _config.Scope);
+            _config.Scope,
+            loggerFactory: _loggerFactory);
 
         var restored = await tokenProvider.RestoreSessionAsync(sub, cancellationToken).ConfigureAwait(false);
         if (!restored)
@@ -282,7 +300,8 @@ public sealed class OAuthSession : IDisposable
             this,
             null,
             _config.JsonOptions,
-            _config.LabelerDids);
+            _config.LabelerDids,
+            loggerFactory: _loggerFactory);
     }
 
     /// <summary>
@@ -293,6 +312,7 @@ public sealed class OAuthSession : IDisposable
     public async Task RevokeAsync(string sub, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        _logger.LogInformation("Revoking OAuth token for {Did}", sub);
 
         // Get session data
         var sessionData = await _sessionStore.GetAsync(sub, cancellationToken).ConfigureAwait(false);
@@ -333,6 +353,7 @@ public sealed class OAuthSession : IDisposable
         }
         catch
         {
+            _logger.LogWarning("Token revocation failed");
             // Ignore revocation errors
         }
 
@@ -368,6 +389,8 @@ public sealed class OAuthSession : IDisposable
 
         // Discover authorization server from PDS
         issuer = await _discovery.DiscoverAuthorizationServerAsync(pdsUrl, cancellationToken).ConfigureAwait(false);
+
+        _logger.LogDebug("Identity resolved: PDS={PdsUrl}, Issuer={Issuer}", pdsUrl, issuer);
 
         // Get server metadata
         var metadata = await _discovery.GetMetadataAsync(issuer, cancellationToken).ConfigureAwait(false);
