@@ -18,7 +18,7 @@ public class XrpcUrlBuildingTests
 {
     private static ATProtoClient CreateClient(HttpClient httpClient, Uri baseUrl)
     {
-        return ATProtoClient.CreatePublic(new ATProtoClientOptions
+        return ATProtoClient.Create(new ATProtoClientOptions
         {
             HttpClient = httpClient,
             JsonOptions = TestHelpers.CreateJsonOptions(),

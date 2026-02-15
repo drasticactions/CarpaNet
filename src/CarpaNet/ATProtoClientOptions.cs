@@ -103,9 +103,10 @@ public sealed class ATProtoClientOptions
 
     /// <summary>
     /// Gets or sets the session store for automatic persistence of password-based sessions.
-    /// Used by <see cref="ATProtoClient.CreateWithSessionAsync"/> and session lifecycle methods.
+    /// Used by <see cref="ATProtoClient.Create"/> and session lifecycle methods.
+    /// Defaults to <see cref="MemorySessionStore"/> if not provided.
     /// </summary>
-    public ISessionStore? SessionStore { get; set; }
+    public ISessionStore SessionStore { get; set; } = new MemorySessionStore();
 
     /// <summary>
     /// Creates a copy of these options.

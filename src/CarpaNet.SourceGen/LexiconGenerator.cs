@@ -1167,13 +1167,12 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         sb.CloseBrace();
         sb.AppendLine();
 
-        // CreatePublic
-        sb.WriteSummary("Creates a public (unauthenticated) ATProtoClient with the generated serialization contexts.");
-        sb.AppendLine("public static ATProtoClient CreatePublic(ATProtoClientOptions? options = null)");
+        // Create
+        sb.WriteSummary("Creates an ATProtoClient with the generated serialization contexts. By default, creates a public (unauthenticated) client.");
+        sb.AppendLine("public static ATProtoClient Create(ATProtoClientOptions? options = null)");
         sb.OpenBrace();
         sb.AppendLine("options ??= new ATProtoClientOptions { JsonOptions = CreateJsonOptions(), CborContext = global::" + cborContextNs + "." + options.CborContextName + ".Default };");
-        sb.AppendLine("options.BaseUrl ??= new Uri(\"https://public.api.bsky.app\");");
-        sb.AppendLine("return new ATProtoClient(options);");
+        sb.AppendLine("return ATProtoClient.Create(options);");
         sb.CloseBrace();
         sb.AppendLine();
 
@@ -1195,9 +1194,9 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         sb.CloseBrace();
         sb.AppendLine();
 
-        // CreatePublicClient
-        sb.WriteSummary("Creates an unauthenticated ATProtoClient with the generated serialization contexts.");
-        sb.AppendLine("public static ATProtoClient CreatePublicClient(");
+        // CreateClient
+        sb.WriteSummary("Creates an ATProtoClient with the generated serialization contexts.");
+        sb.AppendLine("public static ATProtoClient CreateClient(");
         sb.Indent();
         sb.AppendLine("HttpClient? httpClient = null,");
         sb.AppendLine("Uri? baseUrl = null,");
@@ -1205,7 +1204,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         sb.AppendLine("IReadOnlyList<string>? labelerDids = null)");
         sb.Unindent();
         sb.OpenBrace();
-        sb.AppendLine("return ATProtoClient.CreatePublic(new ATProtoClientOptions");
+        sb.AppendLine("return ATProtoClient.Create(new ATProtoClientOptions");
         sb.OpenBrace();
         sb.AppendLine("HttpClient = httpClient,");
         sb.AppendLine("JsonOptions = CreateJsonOptions(),");

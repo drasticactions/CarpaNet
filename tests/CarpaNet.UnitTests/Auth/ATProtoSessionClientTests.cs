@@ -318,7 +318,7 @@ public class ATProtoSessionClientIntegrationTests
 
         using var client = CreateClient();
 
-        await client.LoginAsync(_testHandle!, _testPassword!);
+        var result = await client.LoginAsync(_testHandle!, _testPassword!);
 
         var parameters = new Dictionary<string, string>
         {

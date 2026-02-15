@@ -17,18 +17,8 @@ using CarpaNet.Storage;
 namespace CarpaNet;
 
 /// <summary>
-/// A unified ATProtocol client supporting multiple authentication modes.
+/// Default Implementation of <see cref="IATProtoClient"/>.
 /// </summary>
-/// <remarks>
-/// <para>
-/// This is the main client for interacting with ATProtocol services. It supports:
-/// </para>
-/// <list type="bullet">
-/// <item><description>Public (unauthenticated) access - via <see cref="CreatePublic"/></description></item>
-/// <item><description>Session-based authentication (App Passwords) - via <see cref="CreateWithSessionAsync"/></description></item>
-/// <item><description>Custom token providers - via constructor with <see cref="ITokenProvider"/></description></item>
-/// </list>
-/// </remarks>
 public sealed class ATProtoClient : IATProtoClient, IDisposable
 {
     private readonly HttpClient _httpClient;
@@ -174,19 +164,6 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     #region Factory Methods
 
     /// <summary>
-    /// Creates a public (unauthenticated) client using the Bluesky public AppView.
-    /// </summary>
-    /// <param name="options">Optional configuration options.</param>
-    /// <returns>A public ATProtoClient.</returns>
-    public static ATProtoClient CreatePublic(ATProtoClientOptions? options = null)
-    {
-        options ??= new ATProtoClientOptions();
-        options.BaseUrl ??= new Uri(BlueskyServices.PublicAppView);
-        options.TokenProvider = null; // Ensure no auth
-        return new ATProtoClient(options);
-    }
-
-    /// <summary>
     /// Creates an authenticated client using session-based authentication (App Passwords).
     /// </summary>
     /// <param name="identifier">The user identifier (handle, email, or DID).</param>
@@ -278,14 +255,16 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     }
 
     /// <summary>
-    /// Creates an unauthenticated client configured with a session store for later login via <see cref="LoginAsync"/>.
+    /// Creates an ATProtoClient. By default, creates a public (unauthenticated) client using the Bluesky public AppView.
     /// </summary>
-    /// <param name="options">Configuration options. Must include <see cref="ATProtoClientOptions.SessionStore"/>.</param>
-    /// <returns>An unauthenticated ATProtoClient ready for <see cref="LoginAsync"/>.</returns>
-    public static ATProtoClient Create(ATProtoClientOptions options)
+    /// <param name="options">Optional configuration options.</param>
+    /// <returns>An ATProtoClient instance.</returns>
+    public static ATProtoClient Create(ATProtoClientOptions? options = null)
     {
-        if (options == null) throw new ArgumentNullException(nameof(options));
+        options ??= new ATProtoClientOptions();
         options = options.Clone();
+
+        options.BaseUrl ??= new Uri(BlueskyServices.PublicAppView);
 
         var httpClient = options.HttpClient ?? new HttpClient();
         var ownsHttpClient = options.HttpClient == null;
@@ -368,7 +347,8 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid, parameters);
+        var url = XrpcHttpHandler.BuildUrl(this.TokenProvider?.PdsUrl ?? BaseUrl, nsid, parameters);
+        
         using var request = XrpcHttpHandler.CreateGetRequest(url, proxyServiceDid: null, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -385,7 +365,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid, parameters);
+        var url = XrpcHttpHandler.BuildUrl(this.TokenProvider?.PdsUrl ?? BaseUrl, nsid, parameters);
         using var request = XrpcHttpHandler.CreateGetRequest(url, proxyServiceDid, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -408,7 +388,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
                 "Use CreateWithSessionAsync or provide a TokenProvider.");
         }
 
-        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid);
+        var url = XrpcHttpHandler.BuildUrl(this.TokenProvider?.PdsUrl ?? BaseUrl, nsid);
         using var request = XrpcHttpHandler.CreatePostRequest(url, input, _jsonOptions, proxyServiceDid: null, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -432,7 +412,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
                 "Use CreateWithSessionAsync or provide a TokenProvider.");
         }
 
-        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid);
+        var url = XrpcHttpHandler.BuildUrl(this.TokenProvider?.PdsUrl ?? BaseUrl, nsid);
         using var request = XrpcHttpHandler.CreatePostRequest(url, input, _jsonOptions, proxyServiceDid, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 

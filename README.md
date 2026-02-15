@@ -5,6 +5,10 @@ CarpaNet is a .NET Library for interacting with [ATProtocol](https://atproto.com
 For information on the core CarpaNet library, check out its [Readme](./src/CarpaNet/README.md).
 For information on the Source Generator, check out its [Readme](./src/CarpaNet.SourceGen/README.md).
 
+## **NOTE**
+
+To run the samples and tests, you need to set the `ATPROTO_LEXICON` env to a checkout of [atproto](https://github.com/bluesky-social/atproto), else it won't work. It is not required to build the libraries.
+
 # Comparison to FishyFlip
 
 [FishyFlip](https://github.com/drasticactions/FishyFlip) was my original ATProtocol/Bluesky library for .NET. I originally intended it as a client SDK for Bluesky, but over the years, it evolved into a framework with a source generator and many helper extensions. However, this led to issues:

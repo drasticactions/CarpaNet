@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using CarpaNet.Identity;
 
 namespace CarpaNet.Auth;
 
@@ -89,7 +90,7 @@ public sealed class SessionResponse
     /// </summary>
     [JsonPropertyName("didDoc")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public object? DidDoc { get; set; }
+    public DidDocument? DidDoc { get; set; }
 
     /// <summary>
     /// Gets or sets whether the account is active.

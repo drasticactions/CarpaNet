@@ -18,7 +18,7 @@ public class ATProtoPublicClientTests
 {
     private static ATProtoClient CreateClient(HttpClient? httpClient = null, Uri? baseUrl = null, IReadOnlyList<string>? labelerDids = null)
     {
-        return ATProtoClient.CreatePublic(new ATProtoClientOptions
+        return ATProtoClient.Create(new ATProtoClientOptions
         {
             HttpClient = httpClient,
             JsonOptions = TestHelpers.CreateJsonOptions(),
@@ -65,20 +65,20 @@ public class ATProtoPublicClientTests
     }
 
     [Fact]
-    public async Task PostAsync_ThrowsInvalidOperationException()
+    public async Task PostAsync_ThrowsATProtoException()
     {
         using var client = CreateClient();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<ATProtoException>(
             () => client.PostAsync<object, object>("com.atproto.repo.createRecord", new { }));
     }
 
     [Fact]
-    public async Task PostAsync_WithProxy_ThrowsInvalidOperationException()
+    public async Task PostAsync_WithProxy_ThrowsATProtoException()
     {
         using var client = CreateClient();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<ATProtoException>(
             () => client.PostAsync<object, object>("chat.bsky.convo.sendMessage", "did:web:api.bsky.chat#bsky_chat", new { }));
     }
 

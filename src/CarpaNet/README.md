@@ -24,13 +24,15 @@ The provided implementation client for CarpaNet. Supports public (unauthenticate
 
 ```csharp
 // Public (unauthenticated) access
-var client = ATProtoClient.CreatePublic(new ATProtoClientOptions
+var client = ATProtoClient.Create(new ATProtoClientOptions
 {
     JsonOptions = myJsonOptions,
     CborContext = myCborContext
 });
 
-// Authenticated via password session (using static factory)
+var session = await client.LoginAsync("myhandle.bsky.social", "my-app-password");
+
+// Or authenticate via password session directly using static factory.
 var client = await ATProtoClient.CreateWithSessionAsync(
     "myhandle.bsky.social", "my-app-password",
     options: new ATProtoClientOptions
@@ -38,36 +40,6 @@ var client = await ATProtoClient.CreateWithSessionAsync(
         JsonOptions = myJsonOptions,
         CborContext = myCborContext
     });
-
-// Session lifecycle (login/logout/restore)
-var client = ATProtoClient.Create(new ATProtoClientOptions
-{
-    JsonOptions = myJsonOptions,
-    CborContext = myCborContext,
-    SessionStore = mySessionStore
-});
-var session = await client.LoginAsync("myhandle.bsky.social", "my-app-password");
-```
-
-### ATProtoOAuthClient
-
-OAuth 2.0 flow orchestrator supporting PAR (Pushed Authorization Requests), PKCE, and DPoP. This class is not an `IATProtoClient` itself — it produces an authenticated `ATProtoClient` via `CallbackAsync` or `RestoreSessionAsync`.
-
-```csharp
-var config = new OAuthClientConfig
-{
-    ClientId = clientId,
-    RedirectUri = redirectUri,
-    Scope = "atproto transition:generic",
-    JsonOptions = myJsonOptions,
-    SessionStore = mySessionStore
-};
-
-using var oauthClient = new ATProtoOAuthClient(config);
-var authUrl = await oauthClient.AuthorizeAsync(handle);
-// ... redirect user to authUrl, receive callback ...
-var session = await oauthClient.CallbackAsync(callbackUrl);
-// session implements IATProtoClient
 ```
 
 ## Configuration
@@ -125,7 +97,7 @@ The `Repo` namespace includes `CarReader` for reading CAR (Content Addressable a
 `ITokenProvider` abstracts token management. Two implementations are provided:
 
 - `SessionTokenProvider` — For app password sessions (JWT access/refresh tokens)
-- `DPoPTokenProvider` — For OAuth sessions with DPoP proof-of-possession
+- `DPoPTokenProvider` — For OAuth sessions with DPoP proof-of-possession, you can find this in CarpaNet.OAuth.
 
 Both support automatic token refresh and raise `TokenRefreshed` events for session persistence.
 

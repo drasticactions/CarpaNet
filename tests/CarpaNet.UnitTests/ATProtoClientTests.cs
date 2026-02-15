@@ -32,9 +32,9 @@ public class ATProtoClientTests
     }
 
     [Fact]
-    public void CreatePublic_ReturnsPublicClient()
+    public void Create_ReturnsPublicClient()
     {
-        using var client = ATProtoClient.CreatePublic(CreateDefaultOptions());
+        using var client = ATProtoClient.Create(CreateDefaultOptions());
 
         Assert.False(client.IsAuthenticated);
         Assert.Null(client.AuthenticatedDid);
@@ -42,42 +42,42 @@ public class ATProtoClientTests
     }
 
     [Fact]
-    public void CreatePublic_WithOptions_AppliesOptions()
+    public void Create_WithOptions_AppliesOptions()
     {
         var customUrl = new Uri("https://custom.api.example");
         var options = CreateDefaultOptions();
         options.BaseUrl = customUrl;
 
-        using var client = ATProtoClient.CreatePublic(options);
+        using var client = ATProtoClient.Create(options);
 
         Assert.Equal(customUrl, client.BaseUrl);
     }
 
     [Fact]
-    public void CreatePublic_HasIdentityResolver()
+    public void Create_HasIdentityResolver()
     {
-        using var client = ATProtoClient.CreatePublic(CreateDefaultOptions());
+        using var client = ATProtoClient.Create(CreateDefaultOptions());
 
         Assert.NotNull(client.IdentityResolver);
     }
 
     [Fact]
-    public void CreatePublic_WithoutIdentityResolver_RespectsOption()
+    public void Create_WithoutIdentityResolver_RespectsOption()
     {
         var options = CreateDefaultOptions();
         options.CreateIdentityResolver = false;
 
-        using var client = ATProtoClient.CreatePublic(options);
+        using var client = ATProtoClient.Create(options);
 
         Assert.Null(client.IdentityResolver);
     }
 
     [Fact]
-    public async Task PostAsync_OnPublicClient_ThrowsInvalidOperationException()
+    public async Task PostAsync_OnPublicClient_ThrowsATProtoException()
     {
-        using var client = ATProtoClient.CreatePublic(CreateDefaultOptions());
+        using var client = ATProtoClient.Create(CreateDefaultOptions());
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<ATProtoException>(
             () => client.PostAsync<object, object>("com.atproto.repo.createRecord", new { }));
     }
 
@@ -93,7 +93,7 @@ public class ATProtoClientTests
         });
 
         using var httpClient = new HttpClient(handler);
-        using var client = ATProtoClient.CreatePublic(CreateDefaultOptions(httpClient));
+        using var client = ATProtoClient.Create(CreateDefaultOptions(httpClient));
 
         await client.GetAsync<object>("app.bsky.feed.getTimeline");
         // No exception = success
@@ -238,7 +238,7 @@ public class ATProtoClientTests
         var options = CreateDefaultOptions(httpClient);
         options.LabelerDids = new[] { "did:plc:labeler1", "did:plc:labeler2" };
 
-        using var client = ATProtoClient.CreatePublic(options);
+        using var client = ATProtoClient.Create(options);
         await client.GetAsync<object>("app.bsky.feed.getTimeline");
 
         Assert.Equal("did:plc:labeler1,did:plc:labeler2", labelerHeader);
@@ -270,7 +270,7 @@ public class ATProtoClientTests
     [Fact]
     public void Dispose_CanBeCalledMultipleTimes()
     {
-        var client = ATProtoClient.CreatePublic(CreateDefaultOptions());
+        var client = ATProtoClient.Create(CreateDefaultOptions());
 
         client.Dispose();
         client.Dispose(); // Should not throw
@@ -279,7 +279,7 @@ public class ATProtoClientTests
     [Fact]
     public async Task GetAsync_AfterDispose_ThrowsObjectDisposedException()
     {
-        var client = ATProtoClient.CreatePublic(CreateDefaultOptions());
+        var client = ATProtoClient.Create(CreateDefaultOptions());
         client.Dispose();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(
@@ -321,7 +321,7 @@ public class ATProtoClientIntegrationTests
     [Fact]
     public async Task PublicClient_CanFetchPublicProfile()
     {
-        using var client = ATProtoClient.CreatePublic(CreateDefaultOptions());
+        using var client = ATProtoClient.Create(CreateDefaultOptions());
 
         var parameters = new Dictionary<string, string>
         {

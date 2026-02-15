@@ -30,7 +30,7 @@ if (cursor.HasValue)
 Console.WriteLine("Press Ctrl+C to stop.");
 Console.WriteLine();
 
-var client = ATProtoClientFactory.CreatePublicClient(baseUrl: new Uri(BlueskyServices.Relay));
+var client = ATProtoClientFactory.CreateClient(baseUrl: new Uri(BlueskyServices.Relay));
 
 var parameters = cursor.HasValue ? new SubscribeReposParameters { Cursor = cursor.Value } : null;
 

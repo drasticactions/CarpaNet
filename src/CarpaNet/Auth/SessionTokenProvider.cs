@@ -306,7 +306,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
         _refreshJwt = session.RefreshJwt;
         _did = session.Did;
         _handle = session.Handle;
-        _pdsUrl = pdsUrl;
+        _pdsUrl = session.DidDoc?.PdsEndpoint != null ? new Uri(session.DidDoc.PdsEndpoint) : pdsUrl;
         _accessExpiry = ParseJwtExpiry(session.AccessJwt);
 
         // Persist to store if configured
@@ -318,7 +318,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
                 RefreshJwt = session.RefreshJwt,
                 Did = session.Did,
                 Handle = session.Handle,
-                PdsUrl = pdsUrl.ToString()
+                PdsUrl = _pdsUrl.ToString()
             }).ConfigureAwait(false);
         }
 
