@@ -6,9 +6,11 @@
 
 CarpaNet is the core .NET runtime library for interacting with [ATProtocol](https://atproto.com). It provides ATProtocol primitives, HTTP clients, OAuth support (Via CarpaNet.OAuth), identity resolution, CBOR serialization, event streams, Jetstream support (Via CarpaNet.Jetstream) and repo reading. 
 
+CarpaNet is intended as a "thin" implementation of accessing ATProtocol XRPC endpoints and services. Instead of binding itself to Bluesky services directly, you can use `CarpaNet.SourceGen` to create source generated bindings based on whatever version of the lexicons you wish to use. This should give much more flexability and maintainability for keeping up to date with ATProtocol changes, since now you don't need to depend on the library itself to stay updated.
+
 ![1444070256569233](https://user-images.githubusercontent.com/898335/167266846-1ad2648f-91c1-4a04-a18d-6dd4d6c7d21c.gif)
 
-This library is experimental and not stable. Expect issues and bugs!
+This library is experimental and not stable. Expect issues and bugs! Docs are not complete yet as the API is evolving and not stable.
 
 ## Installation
 
