@@ -6,6 +6,10 @@
 
 CarpaNet.SourceGen is a Roslyn incremental source generator that reads [ATProtocol Lexicon](https://atproto.com/specs/lexicon) JSON files at compile time and generates C# code for data models, API methods, JSON serialization contexts, and CBOR serialization contexts.
 
+![1444070256569233](https://user-images.githubusercontent.com/898335/167266846-1ad2648f-91c1-4a04-a18d-6dd4d6c7d21c.gif)
+
+This library is experimental and not stable. Expect issues and bugs!
+
 ## Installation
 
 ```

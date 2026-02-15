@@ -6,6 +6,10 @@
 
 CarpaNet is the core .NET runtime library for interacting with [ATProtocol](https://atproto.com). It provides ATProtocol primitives, HTTP clients, OAuth support (Via CarpaNet.OAuth), identity resolution, CBOR serialization, event streams, Jetstream support (Via CarpaNet.Jetstream) and repo reading. 
 
+![1444070256569233](https://user-images.githubusercontent.com/898335/167266846-1ad2648f-91c1-4a04-a18d-6dd4d6c7d21c.gif)
+
+This library is experimental and not stable. Expect issues and bugs!
+
 ## Installation
 
 ```
