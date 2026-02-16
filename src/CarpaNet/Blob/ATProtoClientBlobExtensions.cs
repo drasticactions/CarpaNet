@@ -5,6 +5,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using CarpaNet;
 using CarpaNet.Auth;
 
 namespace CarpaNet.Blob;
@@ -84,6 +85,51 @@ public static class ATProtoClientBlobExtensions
 
         using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         return await client.UploadBlobAsync(stream, mimeType, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Downloads a blob from a PDS.
+    /// </summary>
+    /// <param name="client">The ATProto client.</param>
+    /// <param name="did">The DID of the repo that owns the blob.</param>
+    /// <param name="cid">The CID of the blob to download.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The blob data as a byte array.</returns>
+    public static async Task<byte[]> DownloadBlobAsync(
+        this ATProtoClient client,
+        ATDid did,
+        ATCid cid,
+        CancellationToken cancellationToken = default)
+    {
+        var url = new Uri(client.BaseUrl, $"/xrpc/com.atproto.sync.getBlob?did={did}&cid={cid}");
+
+        using var httpClient = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+
+        if (client.IsAuthenticated && client.TokenProvider != null)
+        {
+            var accessToken = await client.TokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            }
+        }
+
+        var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            throw new ATProtoException(
+                $"Blob download failed: {errorContent}",
+                statusCode: response.StatusCode);
+        }
+
+#if NET8_0_OR_GREATER
+        return await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+#else
+        return await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+#endif
     }
 
     private static async Task<BlobRef> UploadBlobInternalAsync(

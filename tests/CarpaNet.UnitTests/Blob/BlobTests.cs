@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Threading.Tasks;
+using CarpaNet;
 using CarpaNet.Blob;
 using Xunit;
 
@@ -64,6 +66,33 @@ public class BlobRefTests
         Assert.NotNull(response!.Blob);
         Assert.Equal("image/gif", response.Blob!.MimeType);
         Assert.Equal(1000, response.Blob.Size);
+    }
+}
+
+public class BlobDownloadTests
+{
+    private static ATProtoClientOptions CreateDefaultOptions()
+    {
+        return new ATProtoClientOptions
+        {
+            JsonOptions = TestHelpers.CreateJsonOptions(),
+            CborContext = CarpaNet.Cbor.CborSerializerContext.Default,
+            BaseUrl = new Uri(BlueskyServices.Entryway)
+        };
+    }
+
+    [Fact]
+    public async Task DownloadBlobAsync_ReturnsNonEmptyBytes()
+    {
+        using var client = ATProtoClient.Create(CreateDefaultOptions());
+
+        ATDid did = "did:plc:okblbaji7rz243bluudjlgxt";
+        ATCid cid = "bafkreig2cadsvr24lz4n2jd65v4j7k5z36is6d4mmspmkci3mxta2caw2i";
+
+        var data = await client.DownloadBlobAsync(did, cid);
+
+        Assert.NotNull(data);
+        Assert.True(data.Length > 0, "Downloaded blob should not be empty.");
     }
 }
 
