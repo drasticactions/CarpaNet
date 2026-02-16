@@ -204,6 +204,42 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         {
             context.AddSource("ATProtoClientFactory.g.cs", SourceText.From(factorySource, Encoding.UTF8));
         }
+
+        // PHASE 8: Report diagnostics for unresolved lexicon references
+        var unresolvedRefs = registry.GetUnresolvedReferences();
+        if (unresolvedRefs.Count > 0)
+        {
+            // Group by NSID (the part before #) to deduplicate and give actionable info
+            var unresolvedByNsid = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            foreach (var fullRef in unresolvedRefs)
+            {
+                var hashIndex = fullRef.IndexOf('#');
+                var nsid = hashIndex >= 0 ? fullRef.Substring(0, hashIndex) : fullRef;
+                if (!unresolvedByNsid.TryGetValue(nsid, out var list))
+                {
+                    list = new List<string>();
+                    unresolvedByNsid[nsid] = list;
+                }
+                list.Add(fullRef);
+            }
+
+            foreach (var kvp in unresolvedByNsid)
+            {
+                var nsid = kvp.Key;
+                var refs = string.Join(", ", kvp.Value);
+                context.ReportDiagnostic(Diagnostic.Create(
+                    new DiagnosticDescriptor(
+                        "ATPG002",
+                        "Unresolved Lexicon Reference",
+                        "Lexicon '{0}' is referenced but not included in the project. Unresolved references: {1}. Add the corresponding lexicon JSON file to resolve this.",
+                        "CarpaNet",
+                        DiagnosticSeverity.Warning,
+                        isEnabledByDefault: true),
+                    Location.None,
+                    nsid,
+                    refs));
+            }
+        }
     }
 
     private static string GenerateNamespaceSource(

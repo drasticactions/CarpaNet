@@ -110,6 +110,7 @@ public sealed class TypeInfo
 public sealed class TypeRegistry
 {
     private readonly Dictionary<string, TypeInfo> _types = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _unresolvedRefs = new(StringComparer.Ordinal);
     private readonly string? _rootNamespace;
 
     public TypeRegistry(string? rootNamespace = null)
@@ -241,6 +242,12 @@ public sealed class TypeRegistry
 
         if (typeInfo == null)
         {
+            // Track unresolved external references
+            if (!refString!.StartsWith("#"))
+            {
+                _unresolvedRefs.Add(fullRef);
+            }
+
             // Unknown type - fall back to generating a type name
             return NsidHelper.RefToFullTypeName(refString!, currentNsid, _rootNamespace);
         }
@@ -285,6 +292,12 @@ public sealed class TypeRegistry
 
         if (typeInfo == null)
         {
+            // Track unresolved external references
+            if (!refString!.StartsWith("#"))
+            {
+                _unresolvedRefs.Add(fullRef);
+            }
+
             return NsidHelper.RefToFullTypeName(refString!, currentNsid, _rootNamespace);
         }
 
@@ -402,6 +415,12 @@ public sealed class TypeRegistry
     /// Gets all registered types.
     /// </summary>
     public IEnumerable<TypeInfo> GetAllTypes() => _types.Values;
+
+    /// <summary>
+    /// Gets all unresolved external references encountered during type resolution.
+    /// Each entry is the full ref string (e.g. "app.bsky.actor.defs#profileViewBasic").
+    /// </summary>
+    public IReadOnlyCollection<string> GetUnresolvedReferences() => _unresolvedRefs;
 
     /// <summary>
     /// Gets types grouped by namespace.
