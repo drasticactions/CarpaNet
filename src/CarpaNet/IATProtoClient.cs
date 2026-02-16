@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using CarpaNet.Auth;
 using CarpaNet.Identity;
 
 namespace CarpaNet;
@@ -49,6 +50,19 @@ public interface IATProtoClient
     /// Returns null if identity resolution is not configured.
     /// </summary>
     IdentityResolver? IdentityResolver { get; }
+
+    /// <summary>
+    /// Gets the token provider used for authentication.
+    /// Returns null if the client is not authenticated.
+    /// </summary>
+    ITokenProvider? TokenProvider { get; }
+
+    /// <summary>
+    /// Gets the HTTP client used for making requests.
+    /// This can be used for advanced scenarios like custom request handling or direct access to the HTTP pipeline.
+    /// Note that using this directly may bypass features like automatic token refreshing, so use with caution.
+    /// </summary>
+    HttpClient HttpClient { get; }
 
     /// <summary>
     /// Gets the list of labeler DIDs whose labels should be included in responses.

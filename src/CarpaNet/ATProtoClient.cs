@@ -56,6 +56,9 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     /// </summary>
     public ITokenProvider? TokenProvider => _tokenProvider;
 
+    /// <inheritdoc/>
+    public HttpClient HttpClient => _httpClient;
+
     /// <summary>
     /// Gets the handle of the authenticated user, if using session-based authentication.
     /// </summary>

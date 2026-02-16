@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using CarpaNet;
+using CarpaNet.Auth;
 using CarpaNet.Identity;
 using Xunit;
 
@@ -410,6 +411,10 @@ public class ATProtoClientExtensionsTests
         public string? AuthenticatedDid { get; set; }
         public IdentityResolver? IdentityResolver { get; set; }
         public IReadOnlyList<string>? LabelerDids { get; set; }
+
+        public ITokenProvider? TokenProvider => throw new NotImplementedException();
+
+        public HttpClient HttpClient => throw new NotImplementedException();
 
         public Task<TOutput> GetAsync<TOutput>(string nsid, IReadOnlyDictionary<string, string>? parameters = null, CancellationToken cancellationToken = default)
             => throw new NotImplementedException();

@@ -57,6 +57,9 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
     /// </summary>
     public ITokenProvider TokenProvider => _tokenProvider;
 
+    /// <inheritdoc/>
+    public HttpClient HttpClient => _httpClient;
+
     /// <summary>
     /// Gets the identity resolver for handle/DID resolution.
     /// </summary>

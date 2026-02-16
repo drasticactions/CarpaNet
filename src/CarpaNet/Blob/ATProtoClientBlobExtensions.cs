@@ -11,7 +11,7 @@ using CarpaNet.Auth;
 namespace CarpaNet.Blob;
 
 /// <summary>
-/// Extension methods for blob operations on ATProtoClient.
+/// Extension methods for blob operations on IATProtoClient.
 /// </summary>
 public static class ATProtoClientBlobExtensions
 {
@@ -25,7 +25,7 @@ public static class ATProtoClientBlobExtensions
     /// <returns>A reference to the uploaded blob.</returns>
     /// <exception cref="InvalidOperationException">If the client is not authenticated.</exception>
     public static async Task<BlobRef> UploadBlobAsync(
-        this ATProtoClient client,
+        this IATProtoClient client,
         Stream content,
         string mimeType,
         CancellationToken cancellationToken = default)
@@ -42,6 +42,7 @@ public static class ATProtoClientBlobExtensions
         var accessToken = await tokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
 
         return await UploadBlobInternalAsync(
+            client,
             client.BaseUrl,
             content,
             mimeType,
@@ -58,7 +59,7 @@ public static class ATProtoClientBlobExtensions
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A reference to the uploaded blob.</returns>
     public static async Task<BlobRef> UploadBlobAsync(
-        this ATProtoClient client,
+        this IATProtoClient client,
         byte[] data,
         string mimeType,
         CancellationToken cancellationToken = default)
@@ -76,7 +77,7 @@ public static class ATProtoClientBlobExtensions
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A reference to the uploaded blob.</returns>
     public static async Task<BlobRef> UploadBlobFromFileAsync(
-        this ATProtoClient client,
+        this IATProtoClient client,
         string filePath,
         string? mimeType = null,
         CancellationToken cancellationToken = default)
@@ -96,14 +97,13 @@ public static class ATProtoClientBlobExtensions
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The blob data as a byte array.</returns>
     public static async Task<byte[]> DownloadBlobAsync(
-        this ATProtoClient client,
+        this IATProtoClient client,
         ATDid did,
         ATCid cid,
         CancellationToken cancellationToken = default)
     {
         var url = new Uri(client.BaseUrl, $"/xrpc/com.atproto.sync.getBlob?did={did}&cid={cid}");
 
-        using var httpClient = new HttpClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
 
         if (client.IsAuthenticated && client.TokenProvider != null)
@@ -115,7 +115,7 @@ public static class ATProtoClientBlobExtensions
             }
         }
 
-        var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var response = await client.HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -133,6 +133,7 @@ public static class ATProtoClientBlobExtensions
     }
 
     private static async Task<BlobRef> UploadBlobInternalAsync(
+        IATProtoClient client,
         Uri baseUrl,
         Stream content,
         string mimeType,
@@ -140,8 +141,6 @@ public static class ATProtoClientBlobExtensions
         CancellationToken cancellationToken)
     {
         var url = new Uri(baseUrl, "/xrpc/com.atproto.repo.uploadBlob");
-
-        using var httpClient = new HttpClient();
 
         // Read stream to byte array for HttpContent
         byte[] data;
@@ -165,7 +164,7 @@ public static class ATProtoClientBlobExtensions
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         }
 
-        var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var response = await client.HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -199,6 +198,7 @@ public static class ATProtoClientBlobExtensions
     /// </summary>
     private static string GetMimeTypeFromExtension(string extension)
     {
+        // TODO: Check the actual header bytes to determine MIME type instead of just relying on extension
         return extension.ToLowerInvariant() switch
         {
             ".jpg" or ".jpeg" => "image/jpeg",
