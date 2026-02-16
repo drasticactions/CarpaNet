@@ -106,7 +106,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         ThrowIfDisposed();
         _logger.LogDebug("OAuth GET {Nsid}", nsid);
 
-        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid, parameters).ToString();
+        var url = (await XrpcHttpHandler.BuildUrlAsync(BaseUrl, nsid, parameters, _identityResolver, cancellationToken).ConfigureAwait(false)).ToString();
         using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Get, url);
         XrpcHttpHandler.AddCommonHeaders(request, null, LabelerDids);
 
@@ -123,7 +123,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid, parameters).ToString();
+        var url = (await XrpcHttpHandler.BuildUrlAsync(BaseUrl, nsid, parameters, _identityResolver, cancellationToken).ConfigureAwait(false)).ToString();
         using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Get, url);
         XrpcHttpHandler.AddCommonHeaders(request, proxyServiceDid, LabelerDids);
 

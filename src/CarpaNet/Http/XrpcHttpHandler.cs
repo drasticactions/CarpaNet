@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
+using CarpaNet.Identity;
 using CarpaNet.Xrpc;
 
 namespace CarpaNet.Http;
@@ -64,6 +65,45 @@ public static class XrpcHttpHandler
         }
 
         return uriBuilder.Uri;
+    }
+
+    /// <summary>
+    /// Builds an XRPC URL with query parameters, optionally resolving the target PDS
+    /// from a "repo" parameter via identity resolution.
+    /// </summary>
+    /// <param name="baseUrl">The base URL of the service.</param>
+    /// <param name="nsid">The NSID of the endpoint.</param>
+    /// <param name="parameters">Optional query parameters.</param>
+    /// <param name="identityResolver">Optional identity resolver for PDS lookup.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The complete URL, potentially targeting a resolved PDS.</returns>
+    public static async Task<Uri> BuildUrlAsync(
+        Uri baseUrl,
+        string nsid,
+        IReadOnlyDictionary<string, string>? parameters = null,
+        IdentityResolver? identityResolver = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (identityResolver != null
+            && parameters != null
+            && parameters.TryGetValue("repo", out var repoValue)
+            && !string.IsNullOrEmpty(repoValue))
+        {
+            try
+            {
+                var didDoc = await identityResolver.ResolveAsync(repoValue, cancellationToken).ConfigureAwait(false);
+                if (didDoc.PdsEndpoint != null)
+                {
+                    baseUrl = new Uri(didDoc.PdsEndpoint);
+                }
+            }
+            catch
+            {
+                // Resolution failed — fall back to original baseUrl
+            }
+        }
+
+        return BuildUrl(baseUrl, nsid, parameters);
     }
 
     /// <summary>

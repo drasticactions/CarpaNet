@@ -362,7 +362,9 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         ThrowIfDisposed();
         _logger.LogDebug("Sending GET {Nsid}", nsid);
 
-        var url = XrpcHttpHandler.BuildUrl(this.TokenProvider?.PdsUrl ?? BaseUrl, nsid, parameters);
+        var url = await XrpcHttpHandler.BuildUrlAsync(
+            this.TokenProvider?.PdsUrl ?? BaseUrl, nsid, parameters,
+            this.IdentityResolver, cancellationToken).ConfigureAwait(false);
 
         using var request = XrpcHttpHandler.CreateGetRequest(url, proxyServiceDid: null, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
@@ -380,7 +382,9 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var url = XrpcHttpHandler.BuildUrl(this.TokenProvider?.PdsUrl ?? BaseUrl, nsid, parameters);
+        var url = await XrpcHttpHandler.BuildUrlAsync(
+            this.TokenProvider?.PdsUrl ?? BaseUrl, nsid, parameters,
+            this.IdentityResolver, cancellationToken).ConfigureAwait(false);
         using var request = XrpcHttpHandler.CreateGetRequest(url, proxyServiceDid, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
