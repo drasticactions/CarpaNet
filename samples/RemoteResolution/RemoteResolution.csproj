@@ -22,6 +22,9 @@
         <LexiconFiles Include="lexicons\com\whtwnd\**\*.json" />
         <LexiconResolve Include="app.bsky.feed.defs" />
         <LexiconResolve Include="com.atproto.repo.listRecords" />
+        <LexiconResolve Include="site.standard.publication" />
+        <LexiconResolve Include="site.standard.document" />
+        <LexiconResolve Include="site.standard.graph.subscription" />
     </ItemGroup>
 
     <Import Project="..\..\src\CarpaNet.SourceGen\build\CarpaNet.SourceGen.targets" />
