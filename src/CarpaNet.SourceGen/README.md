@@ -54,7 +54,39 @@ Point `LexiconFiles` to your ATProtocol Lexicon JSON files:
 
 This will generate the types based on the lexicon files. You can include multiple entries, the source gen will consolidate them down, although you should try and limit the amount you generate to what your program or library needs.
 
+### 4. Resolve Lexicons from DNS
+
+You can also resolve lexicon schemas directly from the network using [ATProtocol's DNS-based lexicon resolution](https://atproto.com/specs/lexicon#lexicon-publication-and-resolution). Add `LexiconResolve` items with the NSIDs you want:
+
+```xml
+<ItemGroup>
+  <!-- Local lexicon files -->
+  <LexiconFiles Include="lexicons/**/*.json" />
+
+  <!-- DNS-resolved lexicons -->
+  <LexiconResolve Include="com.example.myapp.getProfile" />
+  <LexiconResolve Include="com.example.myapp.createPost" />
+</ItemGroup>
+```
+
+At build time, each NSID is resolved via DNS TXT lookup to find the publishing authority's DID, then the lexicon schema is fetched from their PDS. Resolved files are cached locally and automatically fed into `LexiconFiles`, so the source generator handles them identically to local files.
+
+**NOTE**: Remote resolution has its pros and cons - For one, you need a network connection for it to work, and the lexicon has to be registered for it to work, which it may not be. It will fetch new versions once the TTL expires, and that can break your build if it changes. Of course, if the lexicon owner did change their spec, you may want it to break since they now changed their API.
+
+#### How resolution works
+
+Read the spec linked above, but the TL;DR is
+
+1. NSID `com.example.myapp.getProfile` → authority `com.example.myapp` → DNS lookup `_lexicon.myapp.example.com`
+2. DNS TXT record returns `did=did:plc:xxx`
+3. DID document is resolved to find the PDS endpoint
+4. Lexicon record is fetched: `GET {pds}/xrpc/com.atproto.repo.getRecord?repo={did}&collection=com.atproto.lexicon.schema&rkey={nsid}`
+
+NSIDs sharing the same authority are grouped so the DNS + DID resolution only happens once per authority.
+
 ## MSBuild Properties
+
+### Source Generator
 
 | Property | Description | Default |
 |---|---|---|
@@ -62,6 +94,44 @@ This will generate the types based on the lexicon files. You can include multipl
 | `CarpaNet_JsonContextName` | Name for the generated `JsonSerializerContext` class | `ATProtoJsonContext` |
 | `CarpaNet_CborContextName` | Name for the generated `CborSerializerContext` class | `ATProtoCborContext` |
 | `CarpaNet_EmitValidationAttributes` | Emit validation attributes on generated properties | `false` |
+
+### Lexicon Resolution
+
+These properties configure the DNS-based lexicon resolution used with `<LexiconResolve>` items:
+
+| Property | Description | Default |
+|---|---|---|
+| `CarpaNet_LexiconCacheDir` | Directory for caching resolved lexicon files | `$(BaseIntermediateOutputPath)lexicon-cache/` (i.e. `obj/lexicon-cache/`) |
+| `CarpaNet_LexiconCacheTtlHours` | How long cached lexicons are valid (in hours). Set to `0` to force refresh. | `24` |
+| `CarpaNet_LexiconFailOnError` | Whether resolution failures cause a build error (`true`) or warning (`false`) | `true` |
+| `CarpaNet_PlcDirectoryUrl` | PLC directory URL for `did:plc` resolution | `https://plc.directory` |
+| `CarpaNet_DnsServers` | Semicolon-separated DNS server IPs for TXT lookups | `1.1.1.1;8.8.8.8` |
+| `CarpaNet_LexiconAutoResolve` | Automatically discover and resolve transitive lexicon dependencies at build time | `false` |
+| `CarpaNet_LexiconAutoResolveMaxDepth` | Maximum number of iterations for transitive dependency resolution | `10` |
+
+#### Automatic Transitive Resolution
+
+When `CarpaNet_LexiconAutoResolve` is set to `true`, the build will automatically scan all known lexicon files for external NSID references and resolve any missing dependencies. This is repeated iteratively until all transitive dependencies are satisfied (or `MaxDepth` is reached).
+
+This means you only need to list your top-level lexicons — all transitive deps are discovered and resolved automatically:
+
+```xml
+<PropertyGroup>
+    <CarpaNet_LexiconAutoResolve>true</CarpaNet_LexiconAutoResolve>
+</PropertyGroup>
+<ItemGroup>
+    <LexiconFiles Include="lexicons\com\whtwnd\**\*.json" />
+    <LexiconResolve Include="app.bsky.feed.defs" />
+    <!-- transitive dependencies are auto-resolved -->
+</ItemGroup>
+```
+
+#### Caching
+
+Resolved lexicons are cached on disk under `CarpaNet_LexiconCacheDir` with a configurable TTL. This avoids repeated network requests on every build.
+
+- **Force refresh:** `dotnet build -p:CarpaNet_LexiconCacheTtlHours=0`
+- **Clear cache:** delete the `obj/*/lexicon-cache/` directory
 
 ## What Gets Generated
 

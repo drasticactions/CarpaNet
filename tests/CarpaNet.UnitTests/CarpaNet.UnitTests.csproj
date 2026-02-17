@@ -17,12 +17,15 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.Build.Framework" />
+    <PackageReference Include="Microsoft.Build.Utilities.Core" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../src/CarpaNet.OAuth/CarpaNet.OAuth.csproj" />
     <ProjectReference Include="..\..\src\CarpaNet\CarpaNet.csproj" />
     <ProjectReference Include="..\..\src\CarpaNet.SourceGen\CarpaNet.SourceGen.csproj" />
+    <ProjectReference Include="..\..\src\CarpaNet.BuildTasks\CarpaNet.BuildTasks.csproj" />
   </ItemGroup>
 
 </Project>

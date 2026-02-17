@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <PublishAot>true</PublishAot>
+        <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+        <CarpaNet_JsonContextName>ATProtoJsonContext</CarpaNet_JsonContextName>
+        <CarpaNet_LexiconAutoResolve>true</CarpaNet_LexiconAutoResolve>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\CarpaNet\CarpaNet.csproj" />
+        <ProjectReference Include="..\..\src\CarpaNet.SourceGen\CarpaNet.SourceGen.csproj"
+            OutputItemType="Analyzer"
+            ReferenceOutputAssembly="false" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <LexiconFiles Include="lexicons\com\whtwnd\**\*.json" />
+        <LexiconResolve Include="app.bsky.feed.defs" />
+        <LexiconResolve Include="com.atproto.repo.listRecords" />
+        <LexiconResolve Include="site.standard.publication" />
+        <LexiconResolve Include="site.standard.document" />
+        <LexiconResolve Include="site.standard.graph.subscription" />
+    </ItemGroup>
+
+    <Import Project="..\..\src\CarpaNet.SourceGen\build\CarpaNet.SourceGen.targets" />
+
+</Project>
