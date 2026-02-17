@@ -101,7 +101,7 @@ These properties configure the DNS-based lexicon resolution used with `<LexiconR
 
 | Property | Description | Default |
 |---|---|---|
-| `CarpaNet_LexiconCacheDir` | Directory for caching resolved lexicon files | `$(IntermediateOutputPath)lexicon-cache/` |
+| `CarpaNet_LexiconCacheDir` | Directory for caching resolved lexicon files | `$(BaseIntermediateOutputPath)lexicon-cache/` (i.e. `obj/lexicon-cache/`) |
 | `CarpaNet_LexiconCacheTtlHours` | How long cached lexicons are valid (in hours). Set to `0` to force refresh. | `24` |
 | `CarpaNet_LexiconFailOnError` | Whether resolution failures cause a build error (`true`) or warning (`false`) | `true` |
 | `CarpaNet_PlcDirectoryUrl` | PLC directory URL for `did:plc` resolution | `https://plc.directory` |

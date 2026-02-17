@@ -1,12 +1,19 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
+  <!-- Locate the build task DLL: NuGet package layout first, then source build fallback -->
+  <PropertyGroup>
+    <_CarpaNetBuildTasksAssembly>$(MSBuildThisFileDirectory)..\tasks\net8.0\CarpaNet.BuildTasks.dll</_CarpaNetBuildTasksAssembly>
+    <_CarpaNetBuildTasksAssembly Condition="!Exists('$(_CarpaNetBuildTasksAssembly)')">$(MSBuildThisFileDirectory)..\..\CarpaNet.BuildTasks\bin\$(Configuration)\net8.0\CarpaNet.BuildTasks.dll</_CarpaNetBuildTasksAssembly>
+  </PropertyGroup>
+
   <!-- Register the lexicon resolver build task -->
   <UsingTask TaskName="CarpaNet.BuildTasks.ResolveLexiconTask"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\tasks\net8.0\CarpaNet.BuildTasks.dll" />
+             AssemblyFile="$(_CarpaNetBuildTasksAssembly)" />
 
   <!-- Default configuration for DNS-based lexicon resolution -->
   <PropertyGroup>
-    <CarpaNet_LexiconCacheDir Condition="'$(CarpaNet_LexiconCacheDir)' == ''">$(IntermediateOutputPath)lexicon-cache\</CarpaNet_LexiconCacheDir>
+    <CarpaNet_LexiconCacheDir Condition="'$(CarpaNet_LexiconCacheDir)' == '' AND '$(BaseIntermediateOutputPath)' != ''">$(BaseIntermediateOutputPath)lexicon-cache\</CarpaNet_LexiconCacheDir>
+    <CarpaNet_LexiconCacheDir Condition="'$(CarpaNet_LexiconCacheDir)' == ''">obj\lexicon-cache\</CarpaNet_LexiconCacheDir>
     <CarpaNet_LexiconCacheTtlHours Condition="'$(CarpaNet_LexiconCacheTtlHours)' == ''">24</CarpaNet_LexiconCacheTtlHours>
     <CarpaNet_LexiconFailOnError Condition="'$(CarpaNet_LexiconFailOnError)' == ''">true</CarpaNet_LexiconFailOnError>
     <CarpaNet_PlcDirectoryUrl Condition="'$(CarpaNet_PlcDirectoryUrl)' == ''">https://plc.directory</CarpaNet_PlcDirectoryUrl>
