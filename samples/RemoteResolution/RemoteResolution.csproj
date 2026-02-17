@@ -1,26 +1,43 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <PublishAot>true</PublishAot>
-    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
-    <CarpaNet_JsonContextName>ATProtoJsonContext</CarpaNet_JsonContextName>
-  </PropertyGroup>
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <PublishAot>true</PublishAot>
+        <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+        <CarpaNet_JsonContextName>ATProtoJsonContext</CarpaNet_JsonContextName>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\CarpaNet\CarpaNet.csproj" />
-    <ProjectReference Include="..\..\src\CarpaNet.SourceGen\CarpaNet.SourceGen.csproj"
-                      OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
-  </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\CarpaNet\CarpaNet.csproj" />
+        <ProjectReference Include="..\..\src\CarpaNet.SourceGen\CarpaNet.SourceGen.csproj"
+            OutputItemType="Analyzer"
+            ReferenceOutputAssembly="false" />
+    </ItemGroup>
 
-  <ItemGroup>
-    <LexiconResolve Include="com.atproto.label.defs" />
-  </ItemGroup>
+    <ItemGroup>
+        <LexiconFiles Include="lexicons\com\whtwnd\**\*.json" />
+        <LexiconResolve Include="app.bsky.actor.defs" />
+        <LexiconResolve Include="app.bsky.richtext.facet" />
+        <LexiconResolve Include="app.bsky.graph.defs" />
+        <LexiconResolve Include="app.bsky.embed.images" />
+        <LexiconResolve Include="app.bsky.embed.record" />
+        <LexiconResolve Include="app.bsky.embed.recordWithMedia" />
+        <LexiconResolve Include="app.bsky.notification.defs" />
+        <LexiconResolve Include="app.bsky.embed.defs" />
+        <LexiconResolve Include="app.bsky.embed.external" />
+        <LexiconResolve Include="app.bsky.feed.threadgate" />
+        <LexiconResolve Include="app.bsky.feed.postgate" />
+        <LexiconResolve Include="app.bsky.feed.defs" />
+        <LexiconResolve Include="com.atproto.repo.strongRef" />
+        <LexiconResolve Include="app.bsky.labeler.defs" />
+        <LexiconResolve Include="app.bsky.embed.video" />
+        <LexiconResolve Include="com.atproto.moderation.defs" />
+        <LexiconResolve Include="com.atproto.label.defs" />
+    </ItemGroup>
 
-  <Import Project="..\..\src\CarpaNet.SourceGen\build\CarpaNet.SourceGen.targets" />
+    <Import Project="..\..\src\CarpaNet.SourceGen\build\CarpaNet.SourceGen.targets" />
 
 </Project>
