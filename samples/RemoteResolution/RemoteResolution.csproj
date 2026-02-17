@@ -8,6 +8,7 @@
         <PublishAot>true</PublishAot>
         <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
         <CarpaNet_JsonContextName>ATProtoJsonContext</CarpaNet_JsonContextName>
+        <CarpaNet_LexiconAutoResolve>true</CarpaNet_LexiconAutoResolve>
     </PropertyGroup>
 
     <ItemGroup>
@@ -19,23 +20,8 @@
 
     <ItemGroup>
         <LexiconFiles Include="lexicons\com\whtwnd\**\*.json" />
-        <LexiconResolve Include="app.bsky.actor.defs" />
-        <LexiconResolve Include="app.bsky.richtext.facet" />
-        <LexiconResolve Include="app.bsky.graph.defs" />
-        <LexiconResolve Include="app.bsky.embed.images" />
-        <LexiconResolve Include="app.bsky.embed.record" />
-        <LexiconResolve Include="app.bsky.embed.recordWithMedia" />
-        <LexiconResolve Include="app.bsky.notification.defs" />
-        <LexiconResolve Include="app.bsky.embed.defs" />
-        <LexiconResolve Include="app.bsky.embed.external" />
-        <LexiconResolve Include="app.bsky.feed.threadgate" />
-        <LexiconResolve Include="app.bsky.feed.postgate" />
         <LexiconResolve Include="app.bsky.feed.defs" />
-        <LexiconResolve Include="com.atproto.repo.strongRef" />
-        <LexiconResolve Include="app.bsky.labeler.defs" />
-        <LexiconResolve Include="app.bsky.embed.video" />
-        <LexiconResolve Include="com.atproto.moderation.defs" />
-        <LexiconResolve Include="com.atproto.label.defs" />
+        <LexiconResolve Include="com.atproto.repo.listRecords" />
     </ItemGroup>
 
     <Import Project="..\..\src\CarpaNet.SourceGen\build\CarpaNet.SourceGen.targets" />
