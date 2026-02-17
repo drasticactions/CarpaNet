@@ -10,10 +10,12 @@
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2"/>
-    <PackageVersion Include="coverlet.collector" Version="6.0.4"/>
-    <PackageVersion Include="GitVersion.MSBuild" Version="6.5.1" />
+    <PackageVersion Include="coverlet.collector" Version="8.0.0"/>
+    <PackageVersion Include="GitVersion.MSBuild" Version="6.6.0" />
     <PackageVersion Include="ZstdSharp.Port" Version="0.8.7" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Build.Framework" Version="18.3.3" />
+    <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="18.3.3" />
   </ItemGroup>
 </Project>

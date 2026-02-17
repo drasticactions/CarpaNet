@@ -1,5 +1,18 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
+  <!-- Register the lexicon resolver build task -->
+  <UsingTask TaskName="CarpaNet.BuildTasks.ResolveLexiconTask"
+             AssemblyFile="$(MSBuildThisFileDirectory)..\tasks\net8.0\CarpaNet.BuildTasks.dll" />
+
+  <!-- Default configuration for DNS-based lexicon resolution -->
+  <PropertyGroup>
+    <CarpaNet_LexiconCacheDir Condition="'$(CarpaNet_LexiconCacheDir)' == ''">$(IntermediateOutputPath)lexicon-cache\</CarpaNet_LexiconCacheDir>
+    <CarpaNet_LexiconCacheTtlHours Condition="'$(CarpaNet_LexiconCacheTtlHours)' == ''">24</CarpaNet_LexiconCacheTtlHours>
+    <CarpaNet_LexiconFailOnError Condition="'$(CarpaNet_LexiconFailOnError)' == ''">true</CarpaNet_LexiconFailOnError>
+    <CarpaNet_PlcDirectoryUrl Condition="'$(CarpaNet_PlcDirectoryUrl)' == ''">https://plc.directory</CarpaNet_PlcDirectoryUrl>
+    <CarpaNet_DnsServers Condition="'$(CarpaNet_DnsServers)' == ''"></CarpaNet_DnsServers>
+  </PropertyGroup>
+
   <ItemGroup>
     <CompilerVisibleProperty Include="CarpaNet_SourceGen_RootNamespace" />
     <CompilerVisibleProperty Include="CarpaNet_SourceGen_EmitValidationAttributes" />
@@ -11,8 +24,25 @@
     <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="IsATProtoLexicon" />
   </ItemGroup>
 
+  <!-- Resolve lexicons from DNS when LexiconResolve items are present -->
+  <Target Name="_CarpaNetResolveLexicons"
+          BeforeTargets="_CarpaNetMapLexiconFiles"
+          Condition="'@(LexiconResolve)' != ''">
+    <ResolveLexiconTask
+      Nsids="@(LexiconResolve)"
+      CacheDir="$(CarpaNet_LexiconCacheDir)"
+      CacheTtlHours="$(CarpaNet_LexiconCacheTtlHours)"
+      FailOnError="$(CarpaNet_LexiconFailOnError)"
+      PlcDirectoryUrl="$(CarpaNet_PlcDirectoryUrl)"
+      DnsServers="$(CarpaNet_DnsServers)">
+      <Output TaskParameter="ResolvedLexiconFiles" ItemName="LexiconFiles" />
+    </ResolveLexiconTask>
+  </Target>
+
   <!-- Convert LexiconFiles items to AdditionalFiles with marker metadata -->
-  <Target Name="_CarpaNetMapLexiconFiles" BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun">
+  <Target Name="_CarpaNetMapLexiconFiles"
+          BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun"
+          DependsOnTargets="_CarpaNetResolveLexicons">
     <ItemGroup>
       <AdditionalFiles Include="@(LexiconFiles)" IsATProtoLexicon="true" />
     </ItemGroup>

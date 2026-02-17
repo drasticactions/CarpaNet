@@ -34,8 +34,20 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\CarpaNet.BuildTasks\CarpaNet.BuildTasks.csproj"
+                      ReferenceOutputAssembly="false"
+                      SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="build\CarpaNet.SourceGen.targets" Pack="true" PackagePath="build\" Visible="false" />
     <None Include="build\CarpaNet.SourceGen.targets" Pack="true" PackagePath="buildTransitive\" Visible="false" />
+  </ItemGroup>
+
+  <!-- Pack the build task DLL into the NuGet package -->
+  <ItemGroup>
+    <None Include="..\CarpaNet.BuildTasks\bin\$(Configuration)\net8.0\CarpaNet.BuildTasks.dll"
+          Pack="true" PackagePath="tasks\net8.0\" Visible="false" />
   </ItemGroup>
 
   <Import Project="..\..\Version.props" />
