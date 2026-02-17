@@ -106,6 +106,25 @@ These properties configure the DNS-based lexicon resolution used with `<LexiconR
 | `CarpaNet_LexiconFailOnError` | Whether resolution failures cause a build error (`true`) or warning (`false`) | `true` |
 | `CarpaNet_PlcDirectoryUrl` | PLC directory URL for `did:plc` resolution | `https://plc.directory` |
 | `CarpaNet_DnsServers` | Semicolon-separated DNS server IPs for TXT lookups | `1.1.1.1;8.8.8.8` |
+| `CarpaNet_LexiconAutoResolve` | Automatically discover and resolve transitive lexicon dependencies at build time | `false` |
+| `CarpaNet_LexiconAutoResolveMaxDepth` | Maximum number of iterations for transitive dependency resolution | `10` |
+
+#### Automatic Transitive Resolution
+
+When `CarpaNet_LexiconAutoResolve` is set to `true`, the build will automatically scan all known lexicon files for external NSID references and resolve any missing dependencies. This is repeated iteratively until all transitive dependencies are satisfied (or `MaxDepth` is reached).
+
+This means you only need to list your top-level lexicons — all transitive deps are discovered and resolved automatically:
+
+```xml
+<PropertyGroup>
+    <CarpaNet_LexiconAutoResolve>true</CarpaNet_LexiconAutoResolve>
+</PropertyGroup>
+<ItemGroup>
+    <LexiconFiles Include="lexicons\com\whtwnd\**\*.json" />
+    <LexiconResolve Include="app.bsky.feed.defs" />
+    <!-- transitive dependencies are auto-resolved -->
+</ItemGroup>
+```
 
 #### Caching
 
