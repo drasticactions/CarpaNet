@@ -29,6 +29,7 @@ internal sealed class LexiconResolver : IDisposable
     {
         _httpClient = new HttpClient();
         _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
+        _httpClient.DefaultRequestHeaders.Add("User-Agent", "CarpaNet.BuildTasks/1.0");
         _dnsResolver = new LexiconDnsResolver(dnsServers);
         _plcDirectoryUrl = plcDirectoryUrl.TrimEnd('/');
         _logInfo = logInfo ?? (_ => { });
