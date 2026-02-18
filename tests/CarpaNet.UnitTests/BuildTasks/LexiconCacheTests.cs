@@ -123,4 +123,138 @@ public class LexiconCacheTests : IDisposable
         // TTL of 0 means everything is expired
         Assert.Null(cache.TryGet(nsid));
     }
+
+    [Fact]
+    public void StoreAuthorityManifest_And_TryGet_RoundTrips()
+    {
+        var cache = new LexiconCache(_tempDir);
+        var authority = "blog.pckt";
+        var nsids = new System.Collections.Generic.List<string>
+        {
+            "blog.pckt.block.text",
+            "blog.pckt.block.image",
+            "blog.pckt.content",
+        };
+
+        cache.StoreAuthorityManifest(authority, nsids);
+        var result = cache.TryGetAuthorityManifest(authority);
+
+        Assert.NotNull(result);
+        Assert.Equal(nsids, result);
+    }
+
+    [Fact]
+    public void TryGetAuthorityManifest_ReturnsNull_WhenNotCached()
+    {
+        var cache = new LexiconCache(_tempDir);
+        var result = cache.TryGetAuthorityManifest("com.example.nonexistent");
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void TryGetAuthorityManifest_ReturnsNull_WhenExpired()
+    {
+        var cache = new LexiconCache(_tempDir, ttlHours: 1);
+        var authority = "blog.pckt";
+
+        // Write files manually with old timestamp
+        Directory.CreateDirectory(_tempDir);
+        File.WriteAllText(cache.GetAuthorityJsonPath(authority), """["blog.pckt.content"]""");
+        var oldTime = DateTimeOffset.UtcNow.AddHours(-2);
+        File.WriteAllText(cache.GetAuthorityMetaPath(authority), oldTime.ToString("O", CultureInfo.InvariantCulture));
+
+        var result = cache.TryGetAuthorityManifest(authority);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void TryGetAuthorityManifest_ReturnsCached_WhenNotExpired()
+    {
+        var cache = new LexiconCache(_tempDir, ttlHours: 24);
+        var authority = "blog.pckt";
+        var nsids = new System.Collections.Generic.List<string> { "blog.pckt.content" };
+
+        cache.StoreAuthorityManifest(authority, nsids);
+        var result = cache.TryGetAuthorityManifest(authority);
+
+        Assert.NotNull(result);
+        Assert.Equal(nsids, result);
+    }
+
+    [Fact]
+    public void GetAuthorityJsonPath_ReturnsExpectedPath()
+    {
+        var cache = new LexiconCache(_tempDir);
+        var expected = Path.Combine(_tempDir, "_authority.blog.pckt.json");
+
+        Assert.Equal(expected, cache.GetAuthorityJsonPath("blog.pckt"));
+    }
+
+    [Fact]
+    public void GetAuthorityMetaPath_ReturnsExpectedPath()
+    {
+        var cache = new LexiconCache(_tempDir);
+        var expected = Path.Combine(_tempDir, "_authority.blog.pckt.meta");
+
+        Assert.Equal(expected, cache.GetAuthorityMetaPath("blog.pckt"));
+    }
+
+    [Fact]
+    public void StoreAuthorityManifest_EmptyList_RoundTrips()
+    {
+        var cache = new LexiconCache(_tempDir);
+        var authority = "com.empty";
+        var nsids = new System.Collections.Generic.List<string>();
+
+        cache.StoreAuthorityManifest(authority, nsids);
+        var result = cache.TryGetAuthorityManifest(authority);
+
+        Assert.NotNull(result);
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void ZeroTtl_ForcesRefresh_ForAuthorityManifest()
+    {
+        var cache = new LexiconCache(_tempDir, ttlHours: 0);
+        var authority = "blog.pckt";
+        cache.StoreAuthorityManifest(authority, new System.Collections.Generic.List<string> { "blog.pckt.content" });
+
+        Assert.Null(cache.TryGetAuthorityManifest(authority));
+    }
+
+    [Fact]
+    public void AuthorityManifest_WithDid_SanitizesColonsInFilename()
+    {
+        var cache = new LexiconCache(_tempDir);
+        var did = "did:plc:revjuqmkvrw6fnkxppqtszpv";
+
+        // Colons should be replaced with underscores in the filename
+        var jsonPath = cache.GetAuthorityJsonPath(did);
+        var metaPath = cache.GetAuthorityMetaPath(did);
+
+        Assert.DoesNotContain(":", Path.GetFileName(jsonPath));
+        Assert.DoesNotContain(":", Path.GetFileName(metaPath));
+        Assert.Contains("did_plc_", Path.GetFileName(jsonPath));
+    }
+
+    [Fact]
+    public void AuthorityManifest_WithDid_RoundTrips()
+    {
+        var cache = new LexiconCache(_tempDir);
+        var did = "did:plc:revjuqmkvrw6fnkxppqtszpv";
+        var nsids = new System.Collections.Generic.List<string>
+        {
+            "blog.pckt.block.text",
+            "blog.pckt.content",
+        };
+
+        cache.StoreAuthorityManifest(did, nsids);
+        var result = cache.TryGetAuthorityManifest(did);
+
+        Assert.NotNull(result);
+        Assert.Equal(nsids, result);
+    }
 }

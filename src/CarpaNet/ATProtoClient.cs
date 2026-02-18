@@ -341,7 +341,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         }
         else if (options.CreateIdentityResolver)
         {
-            IdentityResolver = new IdentityResolver(httpClient, loggerFactory: _loggerFactory);
+            IdentityResolver = new IdentityResolver(httpClient, dnsResolver: new DefaultDnsResolver(), cache: new MemoryIdentityCache(), loggerFactory: _loggerFactory);
         }
 
         _ownsTokenProvider = ownsTokenProvider;
