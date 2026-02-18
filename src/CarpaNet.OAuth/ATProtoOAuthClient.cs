@@ -76,6 +76,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         DPoPTokenProvider tokenProvider,
         OAuthSession session,
         string? appState,
+        IdentityResolver identityResolver,
         JsonSerializerOptions? jsonOptions = null,
         IReadOnlyList<string>? labelerDids = null,
         ILoggerFactory? loggerFactory = null)
@@ -89,7 +90,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         _httpClient = new HttpClient();
         var factory = loggerFactory ?? NullLoggerFactory.Instance;
         _logger = factory.CreateLogger<ATProtoOAuthClient>();
-        _identityResolver = new IdentityResolver(_httpClient, loggerFactory: factory);
+        _identityResolver = identityResolver;
         _jsonOptions = jsonOptions ?? new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,

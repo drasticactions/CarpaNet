@@ -55,4 +55,22 @@ public class NsidAuthorityTests
     {
         Assert.Throws<ArgumentException>(() => NsidAuthority.GetAuthority("noDotsHere"));
     }
+
+    [Theory]
+    [InlineData("com.example", true)]
+    [InlineData("blog.pckt", true)]
+    [InlineData("app.bsky.feed", true)]
+    [InlineData("com.atproto.repo", true)]
+    [InlineData("tools.ozone.moderation", true)]
+    [InlineData("my-domain.example", true)]
+    [InlineData("invalid", false)]               // Only 1 segment
+    [InlineData("", false)]                       // Empty
+    [InlineData("1com.example", false)]           // First segment starts with digit
+    [InlineData("com..example", false)]           // Empty segment
+    [InlineData("com.example-", false)]           // Segment ends with hyphen
+    [InlineData("-com.example", false)]            // Segment starts with hyphen
+    public void IsValidAuthority_ValidatesCorrectly(string authority, bool expected)
+    {
+        Assert.Equal(expected, NsidAuthority.IsValidAuthority(authority));
+    }
 }

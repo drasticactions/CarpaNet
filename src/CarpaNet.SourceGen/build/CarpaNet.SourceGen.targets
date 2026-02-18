@@ -11,6 +11,8 @@
              AssemblyFile="$(_CarpaNetBuildTasksAssembly)" />
   <UsingTask TaskName="CarpaNet.BuildTasks.AutoResolveLexiconDepsTask"
              AssemblyFile="$(_CarpaNetBuildTasksAssembly)" />
+  <UsingTask TaskName="CarpaNet.BuildTasks.ResolveAuthorityLexiconsTask"
+             AssemblyFile="$(_CarpaNetBuildTasksAssembly)" />
 
   <!-- Default configuration for DNS-based lexicon resolution -->
   <PropertyGroup>
@@ -35,6 +37,21 @@
     <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="IsATProtoLexicon" />
   </ItemGroup>
 
+  <!-- Resolve all lexicons for an authority via listRecords -->
+  <Target Name="_CarpaNetResolveAuthorityLexicons"
+          BeforeTargets="_CarpaNetMapLexiconFiles"
+          Condition="'@(LexiconResolveAuthority)' != ''">
+    <ResolveAuthorityLexiconsTask
+      Authorities="@(LexiconResolveAuthority)"
+      CacheDir="$(CarpaNet_LexiconCacheDir)"
+      CacheTtlHours="$(CarpaNet_LexiconCacheTtlHours)"
+      FailOnError="$(CarpaNet_LexiconFailOnError)"
+      PlcDirectoryUrl="$(CarpaNet_PlcDirectoryUrl)"
+      DnsServers="$(CarpaNet_DnsServers)">
+      <Output TaskParameter="ResolvedLexiconFiles" ItemName="LexiconFiles" />
+    </ResolveAuthorityLexiconsTask>
+  </Target>
+
   <!-- Resolve lexicons from DNS when LexiconResolve items are present -->
   <Target Name="_CarpaNetResolveLexicons"
           BeforeTargets="_CarpaNetMapLexiconFiles"
@@ -52,7 +69,7 @@
 
   <!-- Auto-resolve transitive lexicon dependencies when enabled -->
   <Target Name="_CarpaNetAutoResolveLexiconDeps"
-          DependsOnTargets="_CarpaNetResolveLexicons"
+          DependsOnTargets="_CarpaNetResolveAuthorityLexicons;_CarpaNetResolveLexicons"
           BeforeTargets="_CarpaNetMapLexiconFiles"
           Condition="'$(CarpaNet_LexiconAutoResolve)' == 'true' AND '@(LexiconFiles)' != ''">
     <AutoResolveLexiconDepsTask
@@ -70,7 +87,7 @@
   <!-- Convert LexiconFiles items to AdditionalFiles with marker metadata -->
   <Target Name="_CarpaNetMapLexiconFiles"
           BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun"
-          DependsOnTargets="_CarpaNetResolveLexicons;_CarpaNetAutoResolveLexiconDeps">
+          DependsOnTargets="_CarpaNetResolveAuthorityLexicons;_CarpaNetResolveLexicons;_CarpaNetAutoResolveLexiconDeps">
     <ItemGroup>
       <AdditionalFiles Include="@(LexiconFiles)" IsATProtoLexicon="true" />
     </ItemGroup>

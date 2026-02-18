@@ -321,13 +321,15 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                     break;
 
                 case "object":
-                    ObjectGenerator.GenerateClass(sb, className, defValue, nsid, registry);
+                    var objectTypeId = defName == "main" ? nsid : $"{nsid}#{defName}";
+                    ObjectGenerator.GenerateClass(sb, className, defValue, nsid, registry, typeId: objectTypeId);
                     sb.AppendLine();
                     break;
 
                 case "array":
                     // Array types with union items need to generate the union interface
-                    if (defValue.Items?.Type == "union" && defValue.Items.Refs != null)
+                    if (defValue.Items?.Type == "union" && defValue.Items.Refs != null
+                        && !(defValue.Items.Closed != true && defValue.Items.Refs.Count == 0))
                     {
                         var interfaceName = $"I{className}";
                         UnionGenerator.GenerateUnionInterface(sb, interfaceName, defValue.Items, nsid, registry);
@@ -368,7 +370,8 @@ public sealed class LexiconGenerator : IIncrementalGenerator
             nsid,
             registry,
             isRecord: true,
-            recordType: nsid);
+            recordType: nsid,
+            typeId: nsid);
 
         sb.AppendLine();
     }
@@ -599,7 +602,8 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                         }
 
                         case "union":
-                            if (defValue.Refs != null)
+                            if (defValue.Refs != null
+                                && !(defValue.Closed != true && defValue.Refs.Count == 0))
                             {
                                 var interfaceName = $"I{className}";
                                 var fullName = $"{ns}.{interfaceName}";
@@ -659,7 +663,8 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                             break;
 
                         case "array":
-                            if (defValue.Items?.Type == "union" && defValue.Items.Refs != null)
+                            if (defValue.Items?.Type == "union" && defValue.Items.Refs != null
+                                && !(defValue.Items.Closed != true && defValue.Items.Refs.Count == 0))
                             {
                                 var interfaceName = $"I{className}";
                                 var fullName = $"{ns}.{interfaceName}";
@@ -785,7 +790,8 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                         }
 
                         case "union":
-                            if (defValue.Refs != null)
+                            if (defValue.Refs != null
+                                && !(defValue.Closed != true && defValue.Refs.Count == 0))
                             {
                                 var interfaceName = $"I{className}";
                                 var fullName = $"{ns}.{interfaceName}";
@@ -837,7 +843,8 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                             break;
 
                         case "array":
-                            if (defValue.Items?.Type == "union" && defValue.Items.Refs != null)
+                            if (defValue.Items?.Type == "union" && defValue.Items.Refs != null
+                                && !(defValue.Items.Closed != true && defValue.Items.Refs.Count == 0))
                             {
                                 var interfaceName = $"I{className}";
                                 var fullName = $"{ns}.{interfaceName}";
@@ -1001,7 +1008,8 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         {
             foreach (var prop in properties)
             {
-                if (prop.Value.Type == "union" && prop.Value.Refs != null)
+                if (prop.Value.Type == "union" && prop.Value.Refs != null
+                    && !(prop.Value.Closed != true && prop.Value.Refs.Count == 0))
                 {
                     var cleanClassName = NsidHelper.StripEscapePrefix(className);
                     var cleanPropertyName = NsidHelper.StripEscapePrefix(NsidHelper.ToPascalCase(prop.Key));
@@ -1010,7 +1018,8 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                     ProcessUnionRefs(prop.Value.Refs, fullyQualifiedInterface, currentNsid);
                 }
 
-                if (prop.Value.Type == "array" && prop.Value.Items?.Type == "union" && prop.Value.Items.Refs != null)
+                if (prop.Value.Type == "array" && prop.Value.Items?.Type == "union" && prop.Value.Items.Refs != null
+                    && !(prop.Value.Items.Closed != true && prop.Value.Items.Refs.Count == 0))
                 {
                     var cleanClassName = NsidHelper.StripEscapePrefix(className);
                     var cleanPropertyName = NsidHelper.StripEscapePrefix(NsidHelper.ToPascalCase(prop.Key));
@@ -1054,7 +1063,8 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                             break;
 
                         case "union":
-                            if (defValue.Refs != null)
+                            if (defValue.Refs != null
+                                && !(defValue.Closed != true && defValue.Refs.Count == 0))
                             {
                                 var interfaceName = $"I{className}";
                                 var fullyQualifiedInterface = $"{ns}.{interfaceName}";
@@ -1063,7 +1073,8 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                             break;
 
                         case "array":
-                            if (defValue.Items?.Type == "union" && defValue.Items.Refs != null)
+                            if (defValue.Items?.Type == "union" && defValue.Items.Refs != null
+                                && !(defValue.Items.Closed != true && defValue.Items.Refs.Count == 0))
                             {
                                 var interfaceName = $"I{className}";
                                 var fullyQualifiedInterface = $"{ns}.{interfaceName}";

@@ -25,7 +25,7 @@ public sealed class OAuthSession : IDisposable
     private readonly IOAuthStateStore _stateStore;
     private readonly IOAuthSessionStore _sessionStore;
     private readonly AuthorizationServerDiscovery _discovery;
-    private readonly IdentityResolver? _identityResolver;
+    private readonly IdentityResolver _identityResolver;
     private readonly ILogger<OAuthSession> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private bool _disposed;
@@ -47,7 +47,7 @@ public sealed class OAuthSession : IDisposable
         _stateStore = config.StateStore ?? new MemoryOAuthStateStore();
         _sessionStore = config.SessionStore ?? new MemoryOAuthSessionStore();
         _discovery = new AuthorizationServerDiscovery(_httpClient, loggerFactory: _loggerFactory);
-        _identityResolver = new IdentityResolver(_httpClient, dnsResolver: new CarpaNet.Identity.DefaultDnsResolver(), loggerFactory: _loggerFactory);
+        _identityResolver = config.IdentityResolver ?? new IdentityResolver(_httpClient, dnsResolver: new CarpaNet.Identity.DefaultDnsResolver(), cache: new MemoryIdentityCache(), loggerFactory: _loggerFactory);
     }
 
     /// <summary>
@@ -252,6 +252,7 @@ public sealed class OAuthSession : IDisposable
                 tokenProvider,
                 this,
                 storedState.AppState,
+                identityResolver: _identityResolver,
                 _config.JsonOptions,
                 _config.LabelerDids,
                 loggerFactory: _loggerFactory);
@@ -299,6 +300,7 @@ public sealed class OAuthSession : IDisposable
             tokenProvider,
             this,
             null,
+            identityResolver: _identityResolver,
             _config.JsonOptions,
             _config.LabelerDids,
             loggerFactory: _loggerFactory);

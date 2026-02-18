@@ -20,6 +20,7 @@
 
     <ItemGroup>
         <LexiconFiles Include="lexicons\com\whtwnd\**\*.json" />
+         <LexiconFiles Include="lexicons\app\byte\**\*.json" />
         <LexiconResolve Include="app.bsky.feed.defs" />
         <LexiconResolve Include="com.atproto.repo.listRecords" />
         <LexiconResolve Include="site.standard.publication" />

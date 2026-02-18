@@ -75,4 +75,61 @@ internal sealed class LexiconCache
     /// Checks whether a valid (non-expired) cache entry exists for the given NSID.
     /// </summary>
     public bool IsCached(string nsid) => TryGet(nsid) != null;
+
+    /// <summary>
+    /// Gets the path for the authority manifest JSON file.
+    /// </summary>
+    public string GetAuthorityJsonPath(string authority) => Path.Combine(_cacheDir, "_authority." + authority + ".json");
+
+    /// <summary>
+    /// Gets the path for the authority manifest meta file.
+    /// </summary>
+    public string GetAuthorityMetaPath(string authority) => Path.Combine(_cacheDir, "_authority." + authority + ".meta");
+
+    /// <summary>
+    /// Stores an authority manifest (list of discovered NSIDs) in the cache.
+    /// </summary>
+    public void StoreAuthorityManifest(string authority, List<string> nsids)
+    {
+        Directory.CreateDirectory(_cacheDir);
+
+        var jsonPath = GetAuthorityJsonPath(authority);
+        var metaPath = GetAuthorityMetaPath(authority);
+
+        var json = "[" + string.Join(",", nsids.ConvertAll(n => "\"" + n + "\"")) + "]";
+        File.WriteAllText(jsonPath, json);
+        File.WriteAllText(metaPath, DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// Tries to retrieve a cached authority manifest.
+    /// Returns the list of NSIDs if the manifest is fresh (within TTL), null if expired or missing.
+    /// </summary>
+    public List<string>? TryGetAuthorityManifest(string authority)
+    {
+        var jsonPath = GetAuthorityJsonPath(authority);
+        var metaPath = GetAuthorityMetaPath(authority);
+
+        if (!File.Exists(jsonPath) || !File.Exists(metaPath))
+            return null;
+
+        var metaContent = File.ReadAllText(metaPath).Trim();
+        if (!DateTimeOffset.TryParse(metaContent, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var cachedAt))
+            return null;
+
+        if (DateTimeOffset.UtcNow - cachedAt > _ttl)
+            return null;
+
+        var json = File.ReadAllText(jsonPath);
+        var nsids = new List<string>();
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        foreach (var element in doc.RootElement.EnumerateArray())
+        {
+            var nsid = element.GetString();
+            if (nsid != null)
+                nsids.Add(nsid);
+        }
+
+        return nsids;
+    }
 }

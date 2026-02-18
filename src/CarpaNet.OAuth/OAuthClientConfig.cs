@@ -1,6 +1,7 @@
 using System;
 using System.Net.Http;
 using System.Text.Json;
+using CarpaNet.Identity;
 using CarpaNet.OAuth.Crypto;
 using CarpaNet.OAuth.Storage;
 using Microsoft.Extensions.Logging;
@@ -77,6 +78,12 @@ public sealed class OAuthClientConfig
     /// When null, logging is disabled (NullLoggerFactory is used internally).
     /// </summary>
     public ILoggerFactory? LoggerFactory { get; set; }
+
+    /// <summary>
+    /// Gets or sets the identity resolver for handle/DID resolution.
+    /// If null, a new resolver will be created if needed.
+    /// </summary>
+    public IdentityResolver? IdentityResolver { get; set; }
 
     /// <summary>
     /// Creates a loopback client ID for native/desktop applications.

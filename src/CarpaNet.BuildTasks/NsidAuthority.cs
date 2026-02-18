@@ -82,4 +82,40 @@ internal static class NsidAuthority
     {
         return AuthorityToDnsName(GetAuthority(nsid));
     }
+
+    /// <summary>
+    /// Validates that a string is a well-formed authority (at least 2 dot-separated segments,
+    /// same character rules as NSID segments).
+    /// Example valid authorities: "com.example", "blog.pckt"
+    /// </summary>
+    public static bool IsValidAuthority(string authority)
+    {
+        if (string.IsNullOrWhiteSpace(authority))
+            return false;
+
+        var segments = authority.Split('.');
+        if (segments.Length < 2)
+            return false;
+
+        foreach (var segment in segments)
+        {
+            if (string.IsNullOrEmpty(segment) || segment.Length > 63)
+                return false;
+
+            if (!char.IsLetterOrDigit(segment[0]) || !char.IsLetterOrDigit(segment[segment.Length - 1]))
+                return false;
+
+            foreach (var c in segment)
+            {
+                if (!char.IsLetterOrDigit(c) && c != '-')
+                    return false;
+            }
+        }
+
+        // First segment (TLD in reversed form) must not start with digit
+        if (char.IsDigit(segments[0][0]))
+            return false;
+
+        return true;
+    }
 }

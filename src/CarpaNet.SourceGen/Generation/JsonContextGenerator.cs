@@ -329,8 +329,9 @@ public static class JsonContextGenerator
             GenerateJsonTypeInfo(sb, nestedQualified, nestedSuffix, prop, currentNsid, registry, options, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch, concreteTypes: concreteTypes);
         }
 
-        // Handle unions
-        if (prop.Type == "union" && prop.Refs != null)
+        // Handle unions (skip open unions with no refs - those use JsonElement directly)
+        if (prop.Type == "union" && prop.Refs != null
+            && !(prop.Closed != true && prop.Refs.Count == 0))
         {
             var pascalProp = NsidHelper.ToPascalCase(propertyName);
             // Extract short parent class name for interface naming
@@ -357,7 +358,8 @@ public static class JsonContextGenerator
                 GenerateJsonTypeInfo(sb, nestedQualified, nestedSuffix, prop.Items, currentNsid, registry, options, generatedTypes: generatedTypes, collectedPropertyTypes: collectedPropertyTypes, nestedTypeDispatch: nestedTypeDispatch, concreteTypes: concreteTypes);
             }
 
-            if (prop.Items.Type == "union" && prop.Items.Refs != null)
+            if (prop.Items.Type == "union" && prop.Items.Refs != null
+                && !(prop.Items.Closed != true && prop.Items.Refs.Count == 0))
             {
                 var pascalProp = NsidHelper.ToPascalCase(propertyName);
                 var shortParent = parentQualifiedTypeName.Contains(".")
@@ -420,6 +422,8 @@ public static class JsonContextGenerator
             "array" => GetArrayType(prop, currentNsid, registry, parentClassName, propertyName, parentNamespace),
             "object" when prop.Properties != null && prop.Properties.Count > 0 && parentClassName != null && propertyName != null =>
                 $"{nsPrefix}{parentClassName}{NsidHelper.ToPascalCase(propertyName)}",
+            "union" when prop.Closed != true && (prop.Refs == null || prop.Refs.Count == 0)
+                => "System.Text.Json.JsonElement",
             "union" when prop.Refs != null && parentClassName != null && propertyName != null =>
                 $"{nsPrefix}I{NsidHelper.StripEscapePrefix(parentClassName)}{NsidHelper.StripEscapePrefix(NsidHelper.ToPascalCase(propertyName))}",
             _ => "object"
@@ -449,7 +453,8 @@ public static class JsonContextGenerator
             return $"System.Collections.Generic.List<{nestedClassName}>";
         }
 
-        if (items.Type == "union" && items.Refs != null && parentClassName != null && propertyName != null)
+        if (items.Type == "union" && items.Refs != null && parentClassName != null && propertyName != null
+            && !(items.Closed != true && items.Refs.Count == 0))
         {
             // Union arrays use the same interface name as direct union properties (no Item suffix)
             var cleanParent = NsidHelper.StripEscapePrefix(parentClassName);

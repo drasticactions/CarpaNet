@@ -124,6 +124,94 @@ internal sealed class LexiconResolver : IDisposable
         return results;
     }
 
+
+    /// <summary>
+    /// Enumerates all lexicon records published by an authority using com.atproto.repo.listRecords.
+    /// Returns a dictionary of NSID → lexicon JSON.
+    /// </summary>
+    public async Task<Dictionary<string, string>> ResolveAuthorityAsync(
+        string authority,
+        CancellationToken cancellationToken = default)
+    {
+        // Step 1: DNS TXT lookup for the authority
+        var dnsName = NsidAuthority.AuthorityToDnsName(authority);
+        _logInfo($"Looking up DNS TXT record: {dnsName}");
+
+        var did = await ResolveDnsToDidAsync(dnsName, cancellationToken).ConfigureAwait(false);
+        if (did == null)
+            throw new LexiconResolutionException($"No DID found in DNS TXT record for '{dnsName}' (authority: {authority})");
+
+        _logInfo($"Resolved DID: {did}");
+
+        // Step 2: Resolve DID to PDS endpoint
+        var pdsUrl = await ResolveDidToPdsAsync(did, cancellationToken).ConfigureAwait(false);
+        if (pdsUrl == null)
+            throw new LexiconResolutionException($"No PDS endpoint found for DID '{did}' (authority: {authority})");
+
+        _logInfo($"Resolved PDS: {pdsUrl}");
+
+        // Step 3: Enumerate all lexicon records via listRecords with pagination
+        var results = new Dictionary<string, string>();
+        string? cursor = null;
+
+        do
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var url = $"{pdsUrl}/xrpc/com.atproto.repo.listRecords" +
+                      $"?repo={Uri.EscapeDataString(did)}" +
+                      $"&collection=com.atproto.lexicon.schema" +
+                      $"&limit=100";
+
+            if (cursor != null)
+                url += $"&cursor={Uri.EscapeDataString(cursor)}";
+
+            var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+
+            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(responseJson);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("records", out var records) && records.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var record in records.EnumerateArray())
+                {
+                    // Extract NSID from the URI (at://{did}/com.atproto.lexicon.schema/{rkey})
+                    // The rkey is the NSID
+                    string? nsid = null;
+                    if (record.TryGetProperty("uri", out var uriProp))
+                    {
+                        var uri = uriProp.GetString();
+                        if (uri != null)
+                        {
+                            var lastSlash = uri.LastIndexOf('/');
+                            if (lastSlash >= 0)
+                                nsid = uri.Substring(lastSlash + 1);
+                        }
+                    }
+
+                    if (nsid != null && record.TryGetProperty("value", out var value))
+                    {
+                        results[nsid] = value.GetRawText();
+                        _logInfo($"Discovered lexicon: {nsid}");
+                    }
+                }
+            }
+
+            // Check for next page
+            cursor = null;
+            if (root.TryGetProperty("cursor", out var cursorProp) && cursorProp.ValueKind == JsonValueKind.String)
+            {
+                cursor = cursorProp.GetString();
+            }
+        }
+        while (cursor != null);
+
+        _logInfo($"Discovered {results.Count} lexicons for authority '{authority}'");
+        return results;
+    }
+
     private async Task<string?> ResolveDnsToDidAsync(string dnsName, CancellationToken cancellationToken)
     {
         var records = await _dnsResolver.GetTxtRecordsAsync(dnsName, cancellationToken).ConfigureAwait(false);

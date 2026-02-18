@@ -24,7 +24,8 @@ public static class ObjectGenerator
         string currentNsid,
         TypeRegistry registry,
         bool isRecord = false,
-        string? recordType = null)
+        string? recordType = null,
+        string? typeId = null)
     {
         var requiredProps = def.Required ?? new List<string>();
         var nullableProps = def.Nullable ?? new List<string>();
@@ -42,6 +43,13 @@ public static class ObjectGenerator
 
         sb.AppendLine($"public partial class {NsidHelper.EscapeIdentifier(className)}");
         sb.OpenBrace();
+
+        // Add TypeId constant for all types that have a type identifier
+        if (!string.IsNullOrEmpty(typeId))
+        {
+            sb.AppendLine($"public const string TypeId = \"{typeId}\";");
+            sb.AppendLine();
+        }
 
         // Add $type constant for records
         if (isRecord && !string.IsNullOrEmpty(recordType))
@@ -73,7 +81,8 @@ public static class ObjectGenerator
     {
         foreach (var prop in properties)
         {
-            if (prop.Value.Type == "union" && prop.Value.Refs != null)
+            if (prop.Value.Type == "union" && prop.Value.Refs != null
+                && !(prop.Value.Closed != true && prop.Value.Refs.Count == 0))
             {
                 var interfaceName = GenerateUnionInterfaceName(className, prop.Key);
                 UnionGenerator.GenerateUnionInterface(sb, interfaceName, prop.Value, currentNsid, registry);
@@ -81,7 +90,8 @@ public static class ObjectGenerator
             }
 
             // Also handle arrays of unions
-            if (prop.Value.Type == "array" && prop.Value.Items?.Type == "union" && prop.Value.Items.Refs != null)
+            if (prop.Value.Type == "array" && prop.Value.Items?.Type == "union" && prop.Value.Items.Refs != null
+                && !(prop.Value.Items.Closed != true && prop.Value.Items.Refs.Count == 0))
             {
                 var interfaceName = GenerateUnionInterfaceName(className, prop.Key);
                 UnionGenerator.GenerateUnionInterface(sb, interfaceName, prop.Value.Items, currentNsid, registry);
@@ -227,6 +237,8 @@ public static class ObjectGenerator
             "unknown" => "System.Text.Json.JsonElement",
             "token" => "string",
             "ref" => registry.ResolveToCSharpType(def.Ref, currentNsid),
+            "union" when def.Closed != true && (def.Refs == null || def.Refs.Count == 0)
+                => "System.Text.Json.JsonElement",
             "union" => GenerateUnionInterfaceName(className, propertyName),
             "array" => GetArrayType(def, currentNsid, registry, className, propertyName),
             "object" => "object", // Inline objects - would need special handling
