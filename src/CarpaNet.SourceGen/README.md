@@ -108,7 +108,22 @@ At build time, the authority is resolved to a DID (via DNS, unless a DID is prov
 
 This is useful for third-party or custom lexicon namespaces where you want everything the author publishes without maintaining an explicit list.
 
-`LexiconResolve`, `LexiconResolveAuthority`, and `LexiconFiles` can all be combined freely:
+### 6. Resolve All Lexicons from an AT Protocol Handle
+
+If you know someone's AT Protocol handle (e.g. their Bluesky handle), you can use `LexiconResolveHandle` to fetch all lexicons they've published:
+
+```xml
+<ItemGroup>
+  <LexiconResolveHandle Include="atproto-lexicons.bsky.social" />
+  <LexiconResolveHandle Include="bsky-lexicons.bsky.social" />
+</ItemGroup>
+```
+
+At build time, the handle is resolved to a DID using standard AT Protocol handle resolution (DNS TXT `_atproto.{handle}` first, HTTPS `https://{handle}/.well-known/atproto-did` fallback), then the DID is resolved to a PDS endpoint, and `com.atproto.repo.listRecords` is used to enumerate all `com.atproto.lexicon.schema` records. Each discovered lexicon is fetched, cached, and fed into the source generator.
+
+This differs from `LexiconResolveAuthority` in that it takes a user handle rather than an NSID authority or DID. Use this when you know an account's handle but not the authority namespace or DID they publish lexicons under.
+
+`LexiconResolve`, `LexiconResolveAuthority`, `LexiconResolveHandle`, and `LexiconFiles` can all be combined freely:
 
 ```xml
 <ItemGroup>
@@ -121,6 +136,9 @@ This is useful for third-party or custom lexicon namespaces where you want every
   <!-- All lexicons from these authorities -->
   <LexiconResolveAuthority Include="blog.pckt" />
   <LexiconResolveAuthority Include="site.standard" />
+
+  <!-- All lexicons from these handles -->
+  <LexiconResolveHandle Include="alice.bsky.social" />
 </ItemGroup>
 ```
 

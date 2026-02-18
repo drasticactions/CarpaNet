@@ -148,6 +148,91 @@ internal sealed class LexiconResolver : IDisposable
     }
 
     /// <summary>
+    /// Resolves an AT Protocol handle to a DID, then enumerates all lexicon records.
+    /// Resolution strategy: DNS TXT (_atproto.{handle}) first, HTTPS well-known fallback.
+    /// </summary>
+    public async Task<Dictionary<string, string>> ResolveHandleAsync(
+        string handle,
+        CancellationToken cancellationToken = default)
+    {
+        _logInfo($"Resolving handle: {handle}");
+
+        var did = await ResolveHandleToDidAsync(handle, cancellationToken).ConfigureAwait(false);
+        if (did == null)
+            throw new LexiconResolutionException($"Could not resolve handle '{handle}' to a DID (tried DNS TXT and HTTPS well-known)");
+
+        _logInfo($"Handle '{handle}' resolved to DID: {did}");
+
+        return await ResolveDidAsync(did, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Resolves an AT Protocol handle to a DID using DNS TXT first, then HTTPS fallback.
+    /// </summary>
+    private async Task<string?> ResolveHandleToDidAsync(string handle, CancellationToken cancellationToken)
+    {
+        // Try DNS TXT first: _atproto.{handle}
+        var did = await TryResolveHandleDnsAsync(handle, cancellationToken).ConfigureAwait(false);
+        if (did != null)
+        {
+            _logInfo($"Handle '{handle}' resolved via DNS TXT");
+            return did;
+        }
+
+        // Fallback: HTTPS well-known
+        did = await TryResolveHandleHttpsAsync(handle, cancellationToken).ConfigureAwait(false);
+        if (did != null)
+        {
+            _logInfo($"Handle '{handle}' resolved via HTTPS well-known");
+            return did;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Attempts handle resolution via DNS TXT record at _atproto.{handle}.
+    /// </summary>
+    private async Task<string?> TryResolveHandleDnsAsync(string handle, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var dnsName = $"_atproto.{handle}";
+            return await ResolveDnsToDidAsync(dnsName, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Attempts handle resolution via HTTPS GET https://{handle}/.well-known/atproto-did.
+    /// </summary>
+    private async Task<string?> TryResolveHandleHttpsAsync(string handle, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var url = $"https://{handle}/.well-known/atproto-did";
+            var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var did = body.Trim();
+
+            if (did.StartsWith("did:", StringComparison.OrdinalIgnoreCase))
+                return did;
+
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Enumerates all lexicon records published by a DID using com.atproto.repo.listRecords.
     /// Skips DNS resolution and goes directly to DID → PDS → listRecords.
     /// </summary>
