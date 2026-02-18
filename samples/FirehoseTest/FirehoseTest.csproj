@@ -20,7 +20,7 @@
   <Import Project="..\..\src\CarpaNet.SourceGen\build\CarpaNet.SourceGen.targets" />
 
   <ItemGroup>
-    <LexiconFiles Include="$(ATPROTO_LEXICON)\**\*.json" />
+    <LexiconResolve Include="com.atproto.sync.subscribeRepos" />
   </ItemGroup>
 
 </Project>

@@ -18,6 +18,7 @@
       To learn more, see: https://learn.microsoft.com/dotnet/core/deploying/trimming/trimming-options#trimming-granularity
     -->
     <TrimMode Condition="'$(Configuration)' == 'Release'">full</TrimMode>
+    <CarpaNet_LexiconAutoResolve>true</CarpaNet_LexiconAutoResolve>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,7 +32,13 @@
   <Import Project="../../../src/CarpaNet.SourceGen/build/CarpaNet.SourceGen.targets" />
 
   <ItemGroup>
-    <LexiconFiles Include="$(ATPROTO_LEXICON)\**\*.json" />
+    <LexiconResolve Include="app.bsky.actor.getProfile" />
+    <LexiconResolve Include="app.bsky.actor.getPreferences" />
+    <LexiconResolve Include="app.bsky.feed.getTimeline" />
+    <LexiconResolve Include="app.bsky.feed.post" />
+    <LexiconResolve Include="app.bsky.notification.listNotifications" />
+    <LexiconResolve Include="com.atproto.repo.createRecord" />
+    <LexiconResolve Include="com.atproto.repo.deleteRecord" />
   </ItemGroup>
 
   <!-- Notes about the values set below:

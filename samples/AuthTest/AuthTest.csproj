@@ -10,18 +10,26 @@
     <CarpaNet_EmitValidationAttributes>true</CarpaNet_EmitValidationAttributes>
     <CarpaNet_JsonContextName>ATProtoJsonContext</CarpaNet_JsonContextName>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CarpaNet_LexiconAutoResolve>true</CarpaNet_LexiconAutoResolve>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../src/CarpaNet.OAuth/CarpaNet.OAuth.csproj" />
     <ProjectReference Include="..\..\src\CarpaNet\CarpaNet.csproj" />
-    <ProjectReference Include="..\..\src\CarpaNet.SourceGen\CarpaNet.SourceGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\CarpaNet.SourceGen\CarpaNet.SourceGen.csproj"
+      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <Import Project="..\..\src\CarpaNet.SourceGen\build\CarpaNet.SourceGen.targets" />
 
   <ItemGroup>
-    <LexiconFiles Include="$(ATPROTO_LEXICON)\**\*.json" />
+    <LexiconResolve Include="app.bsky.actor.getProfile" />
+    <LexiconResolve Include="app.bsky.actor.getPreferences" />
+    <LexiconResolve Include="app.bsky.feed.getTimeline" />
+    <LexiconResolve Include="app.bsky.feed.post" />
+    <LexiconResolve Include="app.bsky.notification.listNotifications" />
+    <LexiconResolve Include="com.atproto.repo.createRecord" />
+    <LexiconResolve Include="com.atproto.repo.deleteRecord" />
   </ItemGroup>
 
 </Project>

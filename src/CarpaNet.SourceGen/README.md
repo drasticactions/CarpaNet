@@ -84,6 +84,46 @@ Read the spec linked above, but the TL;DR is
 
 NSIDs sharing the same authority are grouped so the DNS + DID resolution only happens once per authority.
 
+### 5. Resolve All Lexicons from an Authority
+
+If you want to pull in **every** lexicon published by a given authority (or DID), use `LexiconResolveAuthority` instead of listing each NSID individually:
+
+```xml
+<ItemGroup>
+  <LexiconResolveAuthority Include="blog.pckt" />
+  <LexiconResolveAuthority Include="pub.leaflet" />
+  <LexiconResolveAuthority Include="site.standard" />
+</ItemGroup>
+```
+
+You can also pass a DID directly to skip the DNS lookup:
+
+```xml
+<ItemGroup>
+  <LexiconResolveAuthority Include="did:plc:revjuqmkvrw6fnkxppqtszpv" />
+</ItemGroup>
+```
+
+At build time, the authority is resolved to a DID (via DNS, unless a DID is provided directly), then `com.atproto.repo.listRecords` is used to enumerate all `com.atproto.lexicon.schema` records published by that identity. Each discovered lexicon is fetched, cached, and fed into the source generator.
+
+This is useful for third-party or custom lexicon namespaces where you want everything the author publishes without maintaining an explicit list.
+
+`LexiconResolve`, `LexiconResolveAuthority`, and `LexiconFiles` can all be combined freely:
+
+```xml
+<ItemGroup>
+  <!-- Local files -->
+  <LexiconFiles Include="lexicons/**/*.json" />
+
+  <!-- Specific NSIDs -->
+  <LexiconResolve Include="com.atproto.repo.listRecords" />
+
+  <!-- All lexicons from these authorities -->
+  <LexiconResolveAuthority Include="blog.pckt" />
+  <LexiconResolveAuthority Include="site.standard" />
+</ItemGroup>
+```
+
 ## MSBuild Properties
 
 ### Source Generator
@@ -97,7 +137,7 @@ NSIDs sharing the same authority are grouped so the DNS + DID resolution only ha
 
 ### Lexicon Resolution
 
-These properties configure the DNS-based lexicon resolution used with `<LexiconResolve>` items:
+These properties configure the DNS-based lexicon resolution used with `<LexiconResolve>` and `<LexiconResolveAuthority>` items:
 
 | Property | Description | Default |
 |---|---|---|

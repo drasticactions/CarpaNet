@@ -5,14 +5,10 @@ A sample console application that connects to the ATProtocol firehose (relay) an
 ## Prerequisites
 
 - .NET 10 SDK
-- ATProtocol Lexicon JSON files (set `ATPROTO_LEXICON` environment variable to the directory path)
 
 ## Running
 
 ```bash
-# Set the lexicon path
-export ATPROTO_LEXICON=/path/to/atproto/lexicons
-
 # Run the sample
 dotnet run --project samples/FirehoseTest
 

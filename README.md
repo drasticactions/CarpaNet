@@ -13,7 +13,6 @@ This library is experimental and not stable. Expect issues and bugs!
 
 ## **NOTE**
 
-- To run the samples and tests, you need to set the `ATPROTO_LEXICON` env to a checkout of [atproto](https://github.com/bluesky-social/atproto), else it won't work. It is not required to build the libraries.
 - Issues and PRs are fine, however I offer no support for this library. If you find yourself dependent on it for something super important, you should probably fork it.
 
 # Comparison to FishyFlip

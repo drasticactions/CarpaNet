@@ -5,13 +5,11 @@ An console application demonstrating CarpaNet's authentication flows and generat
 ## Prerequisites
 
 - .NET 10 SDK
-- ATProtocol Lexicon JSON files — set the `ATPROTO_LEXICON` environment variable to the directory containing them (e.g., a clone of [bluesky-social/atproto](https://github.com/bluesky-social/atproto/tree/main/lexicons))
 - An ATProtocol account (e.g., Bluesky) for testing authenticated flows
 
 ## Running
 
 ```bash
-export ATPROTO_LEXICON=/path/to/lexicons
 dotnet run --project samples/AuthTest
 ```
 
