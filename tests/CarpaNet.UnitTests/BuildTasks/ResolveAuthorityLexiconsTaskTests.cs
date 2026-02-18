@@ -195,6 +195,72 @@ public class ResolveAuthorityLexiconsTaskTests : IDisposable
     /// <summary>
     /// Minimal IBuildEngine implementation for testing MSBuild tasks.
     /// </summary>
+    [Fact]
+    public void Execute_DidInput_SkipsAuthorityValidation()
+    {
+        // A DID should not be rejected by authority validation
+        // It will fail on network resolution, but that's expected with FailOnError=false
+        var task = new ResolveAuthorityLexiconsTask
+        {
+            Authorities = [new TaskItem("did:plc:revjuqmkvrw6fnkxppqtszpv")],
+            CacheDir = _tempDir,
+            FailOnError = false,
+            BuildEngine = new FakeBuildEngine(),
+        };
+
+        var result = task.Execute();
+
+        // Should not fail with "invalid authority" error — it gets past validation
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void Execute_DidInput_UsesCachedManifest()
+    {
+        var cache = new LexiconCache(_tempDir);
+        var did = "did:plc:revjuqmkvrw6fnkxppqtszpv";
+        var nsids = new List<string>
+        {
+            "blog.pckt.block.text",
+            "blog.pckt.content",
+        };
+
+        foreach (var nsid in nsids)
+        {
+            cache.Store(nsid, $$$"""{"lexicon":1,"id":"{{{nsid}}}"}""");
+        }
+
+        cache.StoreAuthorityManifest(did, nsids);
+
+        var task = new ResolveAuthorityLexiconsTask
+        {
+            Authorities = [new TaskItem(did)],
+            CacheDir = _tempDir,
+            BuildEngine = new FakeBuildEngine(),
+        };
+
+        var result = task.Execute();
+
+        Assert.True(result);
+        Assert.Equal(2, task.ResolvedLexiconFiles.Length);
+    }
+
+    [Fact]
+    public void Execute_DidWebInput_SkipsAuthorityValidation()
+    {
+        var task = new ResolveAuthorityLexiconsTask
+        {
+            Authorities = [new TaskItem("did:web:example.com")],
+            CacheDir = _tempDir,
+            FailOnError = false,
+            BuildEngine = new FakeBuildEngine(),
+        };
+
+        var result = task.Execute();
+
+        Assert.True(result);
+    }
+
     private sealed class FakeBuildEngine : IBuildEngine
     {
         public bool ContinueOnError => false;

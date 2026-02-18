@@ -31,10 +31,8 @@
 
   <ItemGroup>
     <LexiconResolve Include="com.atproto.repo.listRecords" />
-    <LexiconResolve Include="site.standard.publication" />
-    <LexiconResolve Include="site.standard.document" />
-    <LexiconResolve Include="site.standard.graph.subscription" />
     <LexiconResolveAuthority Include="blog.pckt" />
+    <LexiconResolveAuthority Include="site.standard" />
   </ItemGroup>
 
 </Project>

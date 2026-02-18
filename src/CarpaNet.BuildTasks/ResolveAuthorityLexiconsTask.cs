@@ -69,21 +69,22 @@ public sealed class ResolveAuthorityLexiconsTask : Microsoft.Build.Utilities.Tas
 
         foreach (var item in Authorities)
         {
-            var authority = item.ItemSpec;
+            var input = item.ItemSpec;
+            var isDid = input.StartsWith("did:", StringComparison.OrdinalIgnoreCase);
 
-            if (!NsidAuthority.IsValidAuthority(authority))
+            if (!isDid && !NsidAuthority.IsValidAuthority(input))
             {
-                Log.LogError("Invalid authority format: '{0}'. Authorities must have at least 2 dot-separated segments.", authority);
+                Log.LogError("Invalid authority format: '{0}'. Authorities must have at least 2 dot-separated segments, or be a DID (did:plc:... or did:web:...).", input);
                 return false;
             }
 
             try
             {
                 // Check authority manifest cache first
-                var cachedNsids = cache.TryGetAuthorityManifest(authority);
+                var cachedNsids = cache.TryGetAuthorityManifest(input);
                 if (cachedNsids != null)
                 {
-                    Log.LogMessage(MessageImportance.Low, "Using cached authority manifest for '{0}' ({1} lexicons)", authority, cachedNsids.Count);
+                    Log.LogMessage(MessageImportance.Low, "Using cached authority manifest for '{0}' ({1} lexicons)", input, cachedNsids.Count);
 
                     // Verify all individual NSID caches still exist
                     var allCached = true;
@@ -106,11 +107,13 @@ public sealed class ResolveAuthorityLexiconsTask : Microsoft.Build.Utilities.Tas
                         continue;
                     }
 
-                    Log.LogMessage(MessageImportance.Normal, "Some cached lexicons for authority '{0}' are missing, re-resolving", authority);
+                    Log.LogMessage(MessageImportance.Normal, "Some cached lexicons for '{0}' are missing, re-resolving", input);
                 }
 
                 // Resolve from network
-                var resolved = resolver.ResolveAuthorityAsync(authority).GetAwaiter().GetResult();
+                var resolved = isDid
+                    ? resolver.ResolveDidAsync(input).GetAwaiter().GetResult()
+                    : resolver.ResolveAuthorityAsync(input).GetAwaiter().GetResult();
                 var nsidList = new List<string>();
 
                 foreach (var (nsid, json) in resolved)
@@ -121,31 +124,31 @@ public sealed class ResolveAuthorityLexiconsTask : Microsoft.Build.Utilities.Tas
                     Log.LogMessage(MessageImportance.Normal, "Resolved lexicon: {0}", nsid);
                 }
 
-                cache.StoreAuthorityManifest(authority, nsidList);
-                Log.LogMessage(MessageImportance.Normal, "Resolved {0} lexicons for authority '{1}'", nsidList.Count, authority);
+                cache.StoreAuthorityManifest(input, nsidList);
+                Log.LogMessage(MessageImportance.Normal, "Resolved {0} lexicons for '{1}'", nsidList.Count, input);
             }
             catch (LexiconResolutionException ex)
             {
                 if (FailOnError)
                 {
-                    Log.LogError("Authority lexicon resolution failed for '{0}': {1}", authority, ex.Message);
+                    Log.LogError("Authority lexicon resolution failed for '{0}': {1}", input, ex.Message);
                     return false;
                 }
                 else
                 {
-                    Log.LogWarning("Authority lexicon resolution failed for '{0}' (continuing because CarpaNet_LexiconFailOnError=false): {1}", authority, ex.Message);
+                    Log.LogWarning("Authority lexicon resolution failed for '{0}' (continuing because CarpaNet_LexiconFailOnError=false): {1}", input, ex.Message);
                 }
             }
             catch (Exception ex)
             {
                 if (FailOnError)
                 {
-                    Log.LogError("Authority lexicon resolution failed for '{0}' with unexpected error: {1}", authority, ex.Message);
+                    Log.LogError("Authority lexicon resolution failed for '{0}' with unexpected error: {1}", input, ex.Message);
                     return false;
                 }
                 else
                 {
-                    Log.LogWarning("Authority lexicon resolution failed for '{0}' with unexpected error (continuing because CarpaNet_LexiconFailOnError=false): {1}", authority, ex.Message);
+                    Log.LogWarning("Authority lexicon resolution failed for '{0}' with unexpected error (continuing because CarpaNet_LexiconFailOnError=false): {1}", input, ex.Message);
                 }
             }
         }

@@ -79,12 +79,12 @@ internal sealed class LexiconCache
     /// <summary>
     /// Gets the path for the authority manifest JSON file.
     /// </summary>
-    public string GetAuthorityJsonPath(string authority) => Path.Combine(_cacheDir, "_authority." + authority + ".json");
+    public string GetAuthorityJsonPath(string authority) => Path.Combine(_cacheDir, "_authority." + SanitizeCacheKey(authority) + ".json");
 
     /// <summary>
     /// Gets the path for the authority manifest meta file.
     /// </summary>
-    public string GetAuthorityMetaPath(string authority) => Path.Combine(_cacheDir, "_authority." + authority + ".meta");
+    public string GetAuthorityMetaPath(string authority) => Path.Combine(_cacheDir, "_authority." + SanitizeCacheKey(authority) + ".meta");
 
     /// <summary>
     /// Stores an authority manifest (list of discovered NSIDs) in the cache.
@@ -132,4 +132,9 @@ internal sealed class LexiconCache
 
         return nsids;
     }
+
+    /// <summary>
+    /// Sanitizes a cache key for use in filenames by replacing invalid characters.
+    /// </summary>
+    private static string SanitizeCacheKey(string key) => key.Replace(':', '_');
 }

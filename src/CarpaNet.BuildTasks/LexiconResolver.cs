@@ -143,14 +143,37 @@ internal sealed class LexiconResolver : IDisposable
 
         _logInfo($"Resolved DID: {did}");
 
-        // Step 2: Resolve DID to PDS endpoint
+        return await ResolveDidAsync(did, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Enumerates all lexicon records published by a DID using com.atproto.repo.listRecords.
+    /// Skips DNS resolution and goes directly to DID → PDS → listRecords.
+    /// </summary>
+    public async Task<Dictionary<string, string>> ResolveDidAsync(
+        string did,
+        CancellationToken cancellationToken = default)
+    {
+        _logInfo($"Resolving DID directly: {did}");
+
+        // Resolve DID to PDS endpoint
         var pdsUrl = await ResolveDidToPdsAsync(did, cancellationToken).ConfigureAwait(false);
         if (pdsUrl == null)
-            throw new LexiconResolutionException($"No PDS endpoint found for DID '{did}' (authority: {authority})");
+            throw new LexiconResolutionException($"No PDS endpoint found for DID '{did}'");
 
         _logInfo($"Resolved PDS: {pdsUrl}");
 
-        // Step 3: Enumerate all lexicon records via listRecords with pagination
+        return await EnumerateLexiconRecordsAsync(pdsUrl, did, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Enumerates all lexicon records from a PDS via com.atproto.repo.listRecords with pagination.
+    /// </summary>
+    private async Task<Dictionary<string, string>> EnumerateLexiconRecordsAsync(
+        string pdsUrl,
+        string did,
+        CancellationToken cancellationToken)
+    {
         var results = new Dictionary<string, string>();
         string? cursor = null;
 
@@ -208,7 +231,7 @@ internal sealed class LexiconResolver : IDisposable
         }
         while (cursor != null);
 
-        _logInfo($"Discovered {results.Count} lexicons for authority '{authority}'");
+        _logInfo($"Discovered {results.Count} lexicons for DID '{did}'");
         return results;
     }
 

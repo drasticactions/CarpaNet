@@ -224,4 +224,37 @@ public class LexiconCacheTests : IDisposable
 
         Assert.Null(cache.TryGetAuthorityManifest(authority));
     }
+
+    [Fact]
+    public void AuthorityManifest_WithDid_SanitizesColonsInFilename()
+    {
+        var cache = new LexiconCache(_tempDir);
+        var did = "did:plc:revjuqmkvrw6fnkxppqtszpv";
+
+        // Colons should be replaced with underscores in the filename
+        var jsonPath = cache.GetAuthorityJsonPath(did);
+        var metaPath = cache.GetAuthorityMetaPath(did);
+
+        Assert.DoesNotContain(":", Path.GetFileName(jsonPath));
+        Assert.DoesNotContain(":", Path.GetFileName(metaPath));
+        Assert.Contains("did_plc_", Path.GetFileName(jsonPath));
+    }
+
+    [Fact]
+    public void AuthorityManifest_WithDid_RoundTrips()
+    {
+        var cache = new LexiconCache(_tempDir);
+        var did = "did:plc:revjuqmkvrw6fnkxppqtszpv";
+        var nsids = new System.Collections.Generic.List<string>
+        {
+            "blog.pckt.block.text",
+            "blog.pckt.content",
+        };
+
+        cache.StoreAuthorityManifest(did, nsids);
+        var result = cache.TryGetAuthorityManifest(did);
+
+        Assert.NotNull(result);
+        Assert.Equal(nsids, result);
+    }
 }
