@@ -29,7 +29,7 @@
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
-  <Import Project="../../../src/CarpaNet.SourceGen/build/CarpaNet.SourceGen.targets" />
+  <Import Project="../../../src/CarpaNet/build/CarpaNet.targets" />
 
   <ItemGroup>
     <LexiconResolve Include="app.bsky.actor.getProfile" />

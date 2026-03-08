@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
@@ -8,14 +8,7 @@
 
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
-    <IncludeBuildOutput>false</IncludeBuildOutput>
-
-    <PackageId>CarpaNet.SourceGen</PackageId>
-    <Description>Generate bindings of ATProtocol Lexicon files for CarpaNet.</Description>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <DevelopmentDependency>true</DevelopmentDependency>
-    <NoPackageAnalysis>true</NoPackageAnalysis>
-    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,31 +16,11 @@
     <PackageReference Include="System.Text.Json" PrivateAssets="all" GeneratePathProperty="true" />
   </ItemGroup>
 
-  <ItemGroup Condition=" ('$(IsPackable)' == 'true') or ('$(PackAsTool)' == 'true') ">
-    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath=""
-      Visible="false" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
-    <None Include="$(PkgSystem_Text_Json)\lib\netstandard2.0\System.Text.Json.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
-  </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\CarpaNet.BuildTasks\CarpaNet.BuildTasks.csproj"
                       ReferenceOutputAssembly="false"
-                      SkipGetTargetFrameworkProperties="true" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="build\CarpaNet.SourceGen.targets" Pack="true" PackagePath="build\" Visible="false" />
-    <None Include="build\CarpaNet.SourceGen.targets" Pack="true" PackagePath="buildTransitive\" Visible="false" />
-  </ItemGroup>
-
-  <!-- Pack the build task DLL into the NuGet package -->
-  <ItemGroup>
-    <None Include="..\CarpaNet.BuildTasks\bin\$(Configuration)\net8.0\CarpaNet.BuildTasks.dll"
-          Pack="true" PackagePath="tasks\net8.0\" Visible="false" />
+                      SkipGetTargetFrameworkProperties="true"
+                      SetTargetFramework="TargetFramework=net8.0" />
   </ItemGroup>
 
   <Import Project="..\..\Version.props" />

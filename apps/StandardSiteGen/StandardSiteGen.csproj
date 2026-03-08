@@ -27,7 +27,7 @@
     </PackageReference>
   </ItemGroup>
 
-  <Import Project="..\..\src\CarpaNet.SourceGen\build\CarpaNet.SourceGen.targets" />
+  <Import Project="..\..\src\CarpaNet\build\CarpaNet.targets" />
 
   <ItemGroup>
     <LexiconResolve Include="com.atproto.repo.listRecords" />

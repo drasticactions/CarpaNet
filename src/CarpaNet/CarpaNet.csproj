@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net9.0;net10.0;netstandard2.0</TargetFrameworks>
@@ -9,17 +9,51 @@
     <IsAotCompatible Condition="'$(TargetFramework)' == 'netstandard2.0'"></IsAotCompatible>
     <PackageId>CarpaNet</PackageId>
     <Description>.NET ATProtocol Library, built for bindings with source generators.</Description>
+    <DevelopmentDependency>false</DevelopmentDependency>
+    <SuppressDependenciesWhenPacking>false</SuppressDependenciesWhenPacking>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Formats.Cbor" />
-    <PackageReference Include="System.Text.Json" />
+    <PackageReference Include="System.Text.Json" GeneratePathProperty="true" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
   <ItemGroup Condition=" ('$(IsPackable)' == 'true') or ('$(PackAsTool)' == 'true') ">
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath=""
       Visible="false" />
+  </ItemGroup>
+
+  <!-- Source generator project reference (build-only, not a runtime dependency) -->
+  <ItemGroup>
+    <ProjectReference Include="..\CarpaNet.SourceGen\CarpaNet.SourceGen.csproj"
+                      ReferenceOutputAssembly="false"
+                      SkipGetTargetFrameworkProperties="true"
+                      SetTargetFramework="TargetFramework=netstandard2.0" />
+    <ProjectReference Include="..\CarpaNet.BuildTasks\CarpaNet.BuildTasks.csproj"
+                      ReferenceOutputAssembly="false"
+                      SkipGetTargetFrameworkProperties="true"
+                      SetTargetFramework="TargetFramework=net8.0" />
+  </ItemGroup>
+
+  <!-- Pack the source generator analyzer DLLs -->
+  <ItemGroup>
+    <None Include="..\CarpaNet.SourceGen\$(OutputPath)\CarpaNet.SourceGen.dll"
+          Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="$(PkgSystem_Text_Json)\lib\netstandard2.0\System.Text.Json.dll"
+          Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+
+  <!-- Pack build targets -->
+  <ItemGroup>
+    <None Include="build\CarpaNet.targets" Pack="true" PackagePath="build\" Visible="false" />
+    <None Include="build\CarpaNet.targets" Pack="true" PackagePath="buildTransitive\" Visible="false" />
+  </ItemGroup>
+
+  <!-- Pack the build task DLL -->
+  <ItemGroup>
+    <None Include="..\CarpaNet.BuildTasks\bin\$(Configuration)\net8.0\CarpaNet.BuildTasks.dll"
+          Pack="true" PackagePath="tasks\net8.0\" Visible="false" />
   </ItemGroup>
 
   <Import Project="..\..\Version.props" />

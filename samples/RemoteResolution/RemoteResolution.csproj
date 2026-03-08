@@ -27,6 +27,6 @@
         <LexiconResolve Include="site.standard.graph.subscription" />
     </ItemGroup>
 
-    <Import Project="..\..\src\CarpaNet.SourceGen\build\CarpaNet.SourceGen.targets" />
+    <Import Project="..\..\src\CarpaNet\build\CarpaNet.targets" />
 
 </Project>
