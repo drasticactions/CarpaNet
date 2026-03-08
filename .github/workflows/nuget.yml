@@ -31,7 +31,6 @@ jobs:
           dotnet pack src/CarpaNet/CarpaNet.csproj --configuration Release --no-build --output nupkg
           dotnet pack src/CarpaNet.OAuth/CarpaNet.OAuth.csproj --configuration Release --no-build --output nupkg
           dotnet pack src/CarpaNet.Jetstream/CarpaNet.Jetstream.csproj --configuration Release --no-build --output nupkg
-          cp src/CarpaNet.SourceGen/bin/Release/*.nupkg nupkg/
 
       - name: Upload Nuget
         uses: actions/upload-artifact@v4
