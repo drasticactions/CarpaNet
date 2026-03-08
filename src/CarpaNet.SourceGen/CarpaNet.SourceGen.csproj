@@ -20,7 +20,7 @@
     <ProjectReference Include="..\CarpaNet.BuildTasks\CarpaNet.BuildTasks.csproj"
                       ReferenceOutputAssembly="false"
                       SkipGetTargetFrameworkProperties="true"
-                      SetTargetFramework="TargetFramework=net8.0" />
+                      GlobalPropertiesToRemove="TargetFramework" />
   </ItemGroup>
 
   <Import Project="..\..\Version.props" />

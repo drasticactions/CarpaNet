@@ -11,6 +11,9 @@
     <Description>.NET ATProtocol Library, built for bindings with source generators.</Description>
     <DevelopmentDependency>false</DevelopmentDependency>
     <SuppressDependenciesWhenPacking>false</SuppressDependenciesWhenPacking>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+    <!-- Hook into the pack pipeline to add analyzer, targets, and task files -->
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_AddSourceGenPackageFiles</TargetsForTfmSpecificContentInPackage>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,32 +32,29 @@
     <ProjectReference Include="..\CarpaNet.SourceGen\CarpaNet.SourceGen.csproj"
                       ReferenceOutputAssembly="false"
                       SkipGetTargetFrameworkProperties="true"
-                      SetTargetFramework="TargetFramework=netstandard2.0" />
-    <ProjectReference Include="..\CarpaNet.BuildTasks\CarpaNet.BuildTasks.csproj"
-                      ReferenceOutputAssembly="false"
-                      SkipGetTargetFrameworkProperties="true"
-                      SetTargetFramework="TargetFramework=net8.0" />
+                      GlobalPropertiesToRemove="TargetFramework" />
   </ItemGroup>
 
-  <!-- Pack the source generator analyzer DLLs -->
-  <ItemGroup>
-    <None Include="..\CarpaNet.SourceGen\$(OutputPath)\CarpaNet.SourceGen.dll"
-          Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
-    <None Include="$(PkgSystem_Text_Json)\lib\netstandard2.0\System.Text.Json.dll"
-          Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
-  </ItemGroup>
-
-  <!-- Pack build targets -->
-  <ItemGroup>
-    <None Include="build\CarpaNet.targets" Pack="true" PackagePath="build\" Visible="false" />
-    <None Include="build\CarpaNet.targets" Pack="true" PackagePath="buildTransitive\" Visible="false" />
-  </ItemGroup>
-
-  <!-- Pack the build task DLL -->
-  <ItemGroup>
-    <None Include="..\CarpaNet.BuildTasks\bin\$(Configuration)\net8.0\CarpaNet.BuildTasks.dll"
-          Pack="true" PackagePath="tasks\net8.0\" Visible="false" />
-  </ItemGroup>
+  <!-- Add source generator, build targets, and build tasks to the NuGet package.
+       Uses TargetsForTfmSpecificContentInPackage so properties like PkgSystem_Text_Json
+       are resolved at pack time. Only added for one TFM to avoid duplicates. -->
+  <Target Name="_AddSourceGenPackageFiles" Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <ItemGroup>
+      <!-- Analyzer DLLs -->
+      <TfmSpecificPackageFile Include="..\CarpaNet.SourceGen\bin\$(Configuration)\netstandard2.0\CarpaNet.SourceGen.dll"
+                              PackagePath="analyzers/dotnet/cs" />
+      <TfmSpecificPackageFile Include="$(PkgSystem_Text_Json)\lib\netstandard2.0\System.Text.Json.dll"
+                              PackagePath="analyzers/dotnet/cs" />
+      <!-- Build targets -->
+      <TfmSpecificPackageFile Include="build\CarpaNet.targets"
+                              PackagePath="build" />
+      <TfmSpecificPackageFile Include="build\CarpaNet.targets"
+                              PackagePath="buildTransitive" />
+      <!-- Build task DLL -->
+      <TfmSpecificPackageFile Include="..\CarpaNet.BuildTasks\bin\$(Configuration)\net8.0\CarpaNet.BuildTasks.dll"
+                              PackagePath="tasks/net8.0" />
+    </ItemGroup>
+  </Target>
 
   <Import Project="..\..\Version.props" />
 </Project>
