@@ -17,7 +17,7 @@ This skill helps you use CarpaNet to build .NET applications that interact with 
 ## Prerequisites
 
 - .NET 8 or above SDK
-- `dotnet add package CarpaNet`
+- `dotnet add package CarpaNet --prerelease`
 
 ## Project Setup
 
