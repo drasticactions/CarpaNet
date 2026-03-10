@@ -31,6 +31,24 @@ With that, the goals of CarpaNet are to:
 - Reduce complexity and avoid "clever" SDK methods; keep it simple. Leave the hard stuff to the source generator. You shouldn't need to learn new concepts to use this.
 - Keep it ATProtocol, and don't turn this into a Bluesky-specific library. The core CarpaNet library should not include helper methods specific to using Bluesky - The social network. It should stick to making it easier to interoperate with ATProtocol.
 
+## Claude Code Plugin
+
+CarpaNet includes a Claude Code plugin with a skill that teaches Claude how to use the library. It should help project setup, client creation, OAuth, Jetstream, identity resolution, etc.
+
+### Install
+
+1. Add the CarpaNet marketplace:
+   ```
+   /plugin marketplace add drasticactions/CarpaNet
+   ```
+
+2. Install the plugin:
+   ```
+   /plugin install carpanet@carpanet-plugins
+   ```
+
+Or use the interactive UI by running `/plugin`, navigating to the **Discover** tab, and selecting the `carpanet` plugin.
+
 ### Third-Party Libraries
 
 - [GitVersion](https://github.com/GitTools/GitVersion)
