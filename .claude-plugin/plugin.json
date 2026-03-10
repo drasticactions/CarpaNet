@@ -1,0 +1,11 @@
+{
+    "name": "carpanet",
+    "version": "1.0.0",
+    "description": "Claude Code plugin for CarpaNet, a ATProtocol library in C#, https://github.com/drasticactions/carpanet",
+    "author": {
+        "name": "drasticactions",
+        "url": "https://github.com/drasticactions"
+    },
+    "repository": "https://github.com/drasticactions/carpanet",
+    "license": "MIT"
+}

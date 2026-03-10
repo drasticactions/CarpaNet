@@ -1,0 +1,13 @@
+{
+    "name": "carpanet-plugins",
+    "owner": {
+        "name": "drasticactions"
+    },
+    "plugins": [
+        {
+            "name": "carpanet",
+            "source": "./",
+            "description": "Claude Code plugin for CarpaNet, a ATProtocol library in C#"
+        }
+    ]
+}
