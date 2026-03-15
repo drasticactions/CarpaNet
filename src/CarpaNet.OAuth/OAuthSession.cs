@@ -75,7 +75,7 @@ public sealed class OAuthSession : IDisposable
         var state = Pkce.GenerateState();
 
         // Generate DPoP key
-        var dpopKey = DPoPKeyPair.Generate();
+        var dpopKey = await DPoPKeyPair.GenerateAsync().ConfigureAwait(false);
 
         // Store state data
         var stateData = new OAuthStateData
@@ -119,7 +119,7 @@ public sealed class OAuthSession : IDisposable
         // Try PAR if available
         if (!string.IsNullOrEmpty(serverMetadata.PushedAuthorizationRequestEndpoint))
         {
-            _logger.LogDebug("Attempting PAR");
+            _logger.LogDebug("Attempting PAR to {Endpoint}", serverMetadata.PushedAuthorizationRequestEndpoint);
             try
             {
                 var requestUri = await PushAuthorizationRequestAsync(
@@ -137,9 +137,16 @@ public sealed class OAuthSession : IDisposable
                         ["request_uri"] = requestUri
                     });
             }
-            catch (OAuthException)
+            catch (OAuthException ex)
             {
-                _logger.LogWarning("PAR failed, falling back to standard URL");
+                _logger.LogWarning("PAR failed ({Error}): {Description}. Falling back to standard URL.", ex.ErrorCode, ex.Message);
+
+                // If PAR is required by the server, don't silently fall back
+                if (serverMetadata.RequirePushedAuthorizationRequests == true)
+                {
+                    throw;
+                }
+
                 // Fall back to standard authorization URL if PAR fails
             }
         }
@@ -339,7 +346,7 @@ public sealed class OAuthSession : IDisposable
                     using var request = new HttpRequestMessage(HttpMethod.Post, serverMetadata.RevocationEndpoint);
 
                     var nonce = new DPoPNonceCache().Get(serverMetadata.RevocationEndpoint!);
-                    var proof = dpopKey.CreateProof("POST", serverMetadata.RevocationEndpoint!, nonce);
+                    var proof = await dpopKey.CreateProofAsync("POST", serverMetadata.RevocationEndpoint!, nonce).ConfigureAwait(false);
                     request.Headers.Add("DPoP", proof);
 
                     var content = $"token={Uri.EscapeDataString(sessionData.TokenSet.RefreshToken)}&token_type_hint=refresh_token";
@@ -413,7 +420,21 @@ public sealed class OAuthSession : IDisposable
 
         for (int attempt = 0; attempt < 2; attempt++)
         {
-            var proof = dpopKey.CreateProof("POST", parEndpoint, nonce);
+            var proof = await dpopKey.CreateProofAsync("POST", parEndpoint, nonce).ConfigureAwait(false);
+
+            _logger.LogDebug("PAR attempt {Attempt}: endpoint={Endpoint}, nonce={Nonce}", attempt, parEndpoint, nonce ?? "(none)");
+
+            // Log the decoded DPoP proof JWT for diagnostics
+            var proofParts = proof.Split('.');
+            if (proofParts.Length == 3)
+            {
+                var proofHeader = Encoding.UTF8.GetString(Pkce.Base64UrlDecode(proofParts[0]));
+                var proofPayload = Encoding.UTF8.GetString(Pkce.Base64UrlDecode(proofParts[1]));
+                var sigBytes = Pkce.Base64UrlDecode(proofParts[2]);
+                _logger.LogDebug("DPoP proof header: {Header}", proofHeader);
+                _logger.LogDebug("DPoP proof payload: {Payload}", proofPayload);
+                _logger.LogDebug("DPoP proof signature: {SigLength} bytes", sigBytes.Length);
+            }
 
             using var request = new HttpRequestMessage(HttpMethod.Post, parEndpoint);
             request.Headers.Add("DPoP", proof);
@@ -421,7 +442,11 @@ public sealed class OAuthSession : IDisposable
             var formContent = BuildFormContent(authParams);
             request.Content = new StringContent(formContent, Encoding.UTF8, "application/x-www-form-urlencoded");
 
+            _logger.LogDebug("PAR request body: {Body}", formContent);
+
             var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+            _logger.LogDebug("PAR response: {StatusCode}", (int)response.StatusCode);
 
             // Update nonce from response
             if (response.Headers.TryGetValues("DPoP-Nonce", out var nonceValues))
@@ -449,21 +474,25 @@ public sealed class OAuthSession : IDisposable
 
             // Check for use_dpop_nonce error
             var errorContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            _logger.LogWarning("PAR failed with {StatusCode}: {ErrorBody}", (int)response.StatusCode, errorContent);
+
             try
             {
                 var errorResponse = JsonSerializer.Deserialize(errorContent, OAuthJsonContext.Default.OAuthErrorResponse);
                 if (errorResponse?.Error == "use_dpop_nonce" && attempt == 0)
                 {
+                    _logger.LogDebug("PAR retry: use_dpop_nonce, retrying with new nonce");
                     continue; // Retry with new nonce
                 }
 
+                var errorDesc = errorResponse?.ErrorDescription ?? errorContent;
                 throw new OAuthException(
                     errorResponse?.Error ?? "par_failed",
-                    errorResponse?.ErrorDescription ?? errorContent);
+                    $"PAR request to {parEndpoint} failed with HTTP {(int)response.StatusCode}: {errorDesc}");
             }
             catch (JsonException)
             {
-                throw new OAuthException("par_failed", errorContent);
+                throw new OAuthException("par_failed", $"PAR request to {parEndpoint} failed with HTTP {(int)response.StatusCode}: {errorContent}");
             }
         }
 
@@ -482,7 +511,7 @@ public sealed class OAuthSession : IDisposable
 
         for (int attempt = 0; attempt < 2; attempt++)
         {
-            var proof = dpopKey.CreateProof("POST", tokenEndpoint, nonce);
+            var proof = await dpopKey.CreateProofAsync("POST", tokenEndpoint, nonce).ConfigureAwait(false);
 
             using var request = new HttpRequestMessage(HttpMethod.Post, tokenEndpoint);
             request.Headers.Add("DPoP", proof);

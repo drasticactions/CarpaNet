@@ -52,7 +52,7 @@ public sealed class ATProtoDPoPAuthHandler : DelegatingHandler
         CancellationToken cancellationToken)
     {
         // Add DPoP proof and auth headers
-        _tokenProvider.AddDPoPHeaders(request);
+        await _tokenProvider.AddDPoPHeadersAsync(request).ConfigureAwait(false);
 
         var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
         _tokenProvider.UpdateNonceFromResponse(response, request.RequestUri!.ToString());
@@ -64,7 +64,7 @@ public sealed class ATProtoDPoPAuthHandler : DelegatingHandler
 
             // Clone request and add fresh DPoP headers
             using var retryRequest = XrpcHttpHandler.CloneRequest(request, "Authorization", "DPoP");
-            _tokenProvider.AddDPoPHeaders(retryRequest);
+            await _tokenProvider.AddDPoPHeadersAsync(retryRequest).ConfigureAwait(false);
 
             // Copy custom headers (e.g., atproto-proxy)
             foreach (var header in request.Headers)

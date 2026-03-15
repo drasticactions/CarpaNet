@@ -9,6 +9,7 @@ using CarpaNet;
 using CarpaNet.Identity;
 using CarpaNet.OAuth;
 using CarpaNet.OAuth.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace BSkyOAuthAvalonia;
 
@@ -35,6 +36,7 @@ public partial class MainView : UserControl
             Scope = "atproto transition:generic",
             JsonOptions = ATProtoClientFactory.CreateJsonOptions(),
             SessionStore = this.sessionStore,
+            LoggerFactory = new WasmLoggerFactory(),
         };
 
         this.oauthSession = new OAuthSession(config);
@@ -260,3 +262,24 @@ public sealed class OauthStore : IOAuthSessionStore
 public partial class OAuthStoreJsonContext : JsonSerializerContext
 {
 }
+
+internal sealed class WasmLoggerFactory : ILoggerFactory
+{
+    public ILogger CreateLogger(string categoryName) => new WasmLogger(categoryName);
+    public void AddProvider(ILoggerProvider provider) { }
+    public void Dispose() { }
+
+    private sealed class WasmLogger(string category) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Debug;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (!IsEnabled(logLevel)) return;
+            var msg = $"[{logLevel}] {category}: {formatter(state, exception)}";
+            if (exception != null) msg += $"\n{exception}";
+            Console.WriteLine(msg);
+        }
+    }
+}
+
