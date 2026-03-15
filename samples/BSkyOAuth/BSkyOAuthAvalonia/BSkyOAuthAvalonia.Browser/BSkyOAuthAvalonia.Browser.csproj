@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net10.0-browser</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BSkyOAuthAvalonia\BSkyOAuthAvalonia.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="Avalonia" />
+    <PackageReference Include="Avalonia.Browser" />
+  </ItemGroup>
+</Project>
