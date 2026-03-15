@@ -1,5 +1,7 @@
 <Solution>
   <Project Path="../../src/CarpaNet.SourceGen/CarpaNet.SourceGen.csproj" />
   <Project Path="../../src/CarpaNet/CarpaNet.csproj" />
+  <Project Path="../../src/CarpaNet.OAuth/CarpaNet.OAuth.csproj" />
   <Project Path="BSkyOAuth.MacCatalyst/BSkyOAuth.MacCatalyst.csproj" />
+  <Project Path="BSkyOAuthMaui/BSkyOAuthMaui.csproj" />
 </Solution>
