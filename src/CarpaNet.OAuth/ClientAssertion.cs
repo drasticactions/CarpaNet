@@ -1,7 +1,7 @@
 using System;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace CarpaNet.OAuth.Crypto;
 
@@ -23,7 +23,41 @@ public static class ClientAssertion
     /// <param name="keyPair">The signing key pair.</param>
     /// <param name="keyId">Optional key ID to include in the header.</param>
     /// <returns>A signed JWT for client authentication.</returns>
+    /// <remarks>
+    /// On browser platforms, use <see cref="CreateAsync"/> instead.
+    /// </remarks>
     public static string Create(string clientId, string audience, DPoPKeyPair keyPair, string? keyId = null)
+    {
+        var (headerBase64, payloadBase64) = BuildComponents(clientId, audience, keyPair, keyId);
+        var signingInput = $"{headerBase64}.{payloadBase64}";
+
+        var signature = keyPair.SignData(Encoding.UTF8.GetBytes(signingInput));
+        var signatureBase64 = Pkce.Base64UrlEncode(signature);
+
+        return $"{signingInput}.{signatureBase64}";
+    }
+
+    /// <summary>
+    /// Creates a client assertion JWT asynchronously. Works on all platforms including browser.
+    /// </summary>
+    /// <param name="clientId">The client ID.</param>
+    /// <param name="audience">The token endpoint URL or issuer.</param>
+    /// <param name="keyPair">The signing key pair.</param>
+    /// <param name="keyId">Optional key ID to include in the header.</param>
+    /// <returns>A signed JWT for client authentication.</returns>
+    public static async Task<string> CreateAsync(string clientId, string audience, DPoPKeyPair keyPair, string? keyId = null)
+    {
+        var (headerBase64, payloadBase64) = BuildComponents(clientId, audience, keyPair, keyId);
+        var signingInput = $"{headerBase64}.{payloadBase64}";
+
+        var signature = await keyPair.SignDataAsync(Encoding.UTF8.GetBytes(signingInput)).ConfigureAwait(false);
+        var signatureBase64 = Pkce.Base64UrlEncode(signature);
+
+        return $"{signingInput}.{signatureBase64}";
+    }
+
+    private static (string HeaderBase64, string PayloadBase64) BuildComponents(
+        string clientId, string audience, DPoPKeyPair keyPair, string? keyId)
     {
         var now = DateTimeOffset.UtcNow;
 
@@ -46,46 +80,12 @@ public static class ClientAssertion
             Exp = now.AddMinutes(1).ToUnixTimeSeconds()
         };
 
-        return CreateSignedJwt(header, payload, keyPair);
-    }
-
-    private static string CreateSignedJwt(
-        JwtHeader header,
-        ClientAssertionPayload payload,
-        DPoPKeyPair keyPair)
-    {
         var headerJson = JsonSerializer.Serialize(header, OAuthJsonContext.Default.JwtHeader);
         var payloadJson = JsonSerializer.Serialize(payload, OAuthJsonContext.Default.ClientAssertionPayload);
 
         var headerBase64 = Pkce.Base64UrlEncode(Encoding.UTF8.GetBytes(headerJson));
         var payloadBase64 = Pkce.Base64UrlEncode(Encoding.UTF8.GetBytes(payloadJson));
 
-        var signingInput = $"{headerBase64}.{payloadBase64}";
-
-        // Use the key pair's internal signing - we need to create a proof without the DPoP-specific fields
-        // For now, we'll create a simple ES256 signature
-        var jwk = keyPair.ExportKeyPair();
-
-        using var ecdsa = CreateEcdsaFromJwk(jwk);
-        var signature = ecdsa.SignData(Encoding.UTF8.GetBytes(signingInput), HashAlgorithmName.SHA256);
-        var signatureBase64 = Pkce.Base64UrlEncode(signature);
-
-        return $"{signingInput}.{signatureBase64}";
-    }
-
-    private static ECDsa CreateEcdsaFromJwk(JsonWebKey jwk)
-    {
-        var parameters = new ECParameters
-        {
-            Curve = ECCurve.NamedCurves.nistP256,
-            Q = new ECPoint
-            {
-                X = Pkce.Base64UrlDecode(jwk.X!),
-                Y = Pkce.Base64UrlDecode(jwk.Y!)
-            },
-            D = Pkce.Base64UrlDecode(jwk.D!)
-        };
-
-        return ECDsa.Create(parameters);
+        return (headerBase64, payloadBase64);
     }
 }

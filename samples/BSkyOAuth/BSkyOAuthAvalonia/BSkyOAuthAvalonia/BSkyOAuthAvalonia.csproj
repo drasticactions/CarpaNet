@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+        <DefineConstants>$(DefineConstants);AVALONIA</DefineConstants>
+        <NoWarn>$(NoWarn);CS8002;CS8632</NoWarn>
+        <CarpaNet_LexiconAutoResolve>true</CarpaNet_LexiconAutoResolve>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia" />
+        <PackageReference Include="Avalonia.Themes.Fluent" />
+        <PackageReference Include="Avalonia.Controls.WebView" />
+    </ItemGroup>
+
+    <ItemGroup>
+		<ProjectReference Include="../../../../src/CarpaNet/CarpaNet.csproj" />
+		<ProjectReference Include="../../../../src/CarpaNet.OAuth/CarpaNet.OAuth.csproj" />
+		<ProjectReference Include="../../../../src/CarpaNet.SourceGen/CarpaNet.SourceGen.csproj"
+		                  OutputItemType="Analyzer"
+		                  ReferenceOutputAssembly="false" />
+	</ItemGroup>
+
+	<Import Project="../../../../src/CarpaNet/build/CarpaNet.targets" />
+
+    <ItemGroup>
+        <LexiconResolve Include="app.bsky.feed.getTimeline" />
+        <LexiconResolve Include="app.bsky.actor.getProfile" />
+        <LexiconResolve Include="app.bsky.feed.post" />
+    </ItemGroup>
+
+</Project>

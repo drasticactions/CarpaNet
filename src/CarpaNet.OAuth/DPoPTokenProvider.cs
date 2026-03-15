@@ -294,6 +294,38 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
     }
 
     /// <summary>
+    /// Adds DPoP proof and authorization headers to an existing HTTP request asynchronously.
+    /// Works on all platforms including browser.
+    /// </summary>
+    /// <param name="request">The HTTP request to add headers to.</param>
+    /// <param name="includeAccessToken">Whether to include the access token.</param>
+    public async Task AddDPoPHeadersAsync(HttpRequestMessage request, bool includeAccessToken = true)
+    {
+        ThrowIfDisposed();
+
+        if (_dpopKey == null)
+        {
+            throw new InvalidOperationException("No DPoP key available.");
+        }
+
+        var url = request.RequestUri!.ToString();
+        var nonce = _nonceCache.Get(url);
+        var accessToken = includeAccessToken ? _tokenSet?.AccessToken : null;
+        var proof = await _dpopKey.CreateProofAsync(request.Method.Method, url, nonce, accessToken).ConfigureAwait(false);
+
+        // Remove existing DPoP headers before adding new ones
+        request.Headers.Remove("DPoP");
+        request.Headers.Remove("Authorization");
+
+        request.Headers.Add("DPoP", proof);
+
+        if (includeAccessToken && !string.IsNullOrEmpty(accessToken))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("DPoP", accessToken);
+        }
+    }
+
+    /// <summary>
     /// Creates a DPoP-signed HTTP request.
     /// </summary>
     /// <param name="method">The HTTP method.</param>
@@ -312,6 +344,38 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
         var nonce = _nonceCache.Get(url);
         var accessToken = includeAccessToken ? _tokenSet?.AccessToken : null;
         var proof = _dpopKey.CreateProof(method.Method, url, nonce, accessToken);
+
+        var request = new HttpRequestMessage(method, url);
+        request.Headers.Add("DPoP", proof);
+
+        if (includeAccessToken && !string.IsNullOrEmpty(accessToken))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("DPoP", accessToken);
+        }
+
+        return request;
+    }
+
+    /// <summary>
+    /// Creates a DPoP-signed HTTP request asynchronously.
+    /// Works on all platforms including browser.
+    /// </summary>
+    /// <param name="method">The HTTP method.</param>
+    /// <param name="url">The request URL.</param>
+    /// <param name="includeAccessToken">Whether to include the access token.</param>
+    /// <returns>The HTTP request message with DPoP headers.</returns>
+    public async Task<HttpRequestMessage> CreateDPoPRequestAsync(HttpMethod method, string url, bool includeAccessToken = true)
+    {
+        ThrowIfDisposed();
+
+        if (_dpopKey == null)
+        {
+            throw new InvalidOperationException("No DPoP key available.");
+        }
+
+        var nonce = _nonceCache.Get(url);
+        var accessToken = includeAccessToken ? _tokenSet?.AccessToken : null;
+        var proof = await _dpopKey.CreateProofAsync(method.Method, url, nonce, accessToken).ConfigureAwait(false);
 
         var request = new HttpRequestMessage(method, url);
         request.Headers.Add("DPoP", proof);
@@ -367,7 +431,7 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
         CancellationToken cancellationToken)
     {
         _logger.LogDebug("Executing token request to {Endpoint}", tokenEndpoint);
-        using var request = CreateDPoPRequest(HttpMethod.Post, tokenEndpoint, includeAccessToken: false);
+        using var request = await CreateDPoPRequestAsync(HttpMethod.Post, tokenEndpoint, includeAccessToken: false).ConfigureAwait(false);
         request.Content = new StringContent(formContent, Encoding.UTF8, "application/x-www-form-urlencoded");
 
         var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);

@@ -1,5 +1,12 @@
 <Solution>
   <Project Path="../../src/CarpaNet.SourceGen/CarpaNet.SourceGen.csproj" />
   <Project Path="../../src/CarpaNet/CarpaNet.csproj" />
+  <Folder Name="/BSkyOAuthAvalonia/">
+    <Project Path="BSkyOAuthAvalonia/BSkyOAuthAvalonia.Browser/BSkyOAuthAvalonia.Browser.csproj" />
+    <Project Path="BSkyOAuthAvalonia/BSkyOAuthAvalonia.Desktop/BSkyOAuthAvalonia.Desktop.csproj" />
+    <Project Path="BSkyOAuthAvalonia/BSkyOAuthAvalonia/BSkyOAuthAvalonia.csproj" />
+  </Folder>
+  <Project Path="../../src/CarpaNet.OAuth/CarpaNet.OAuth.csproj" />
   <Project Path="BSkyOAuth.MacCatalyst/BSkyOAuth.MacCatalyst.csproj" />
+  <Project Path="BSkyOAuthMaui/BSkyOAuthMaui.csproj" />
 </Solution>

@@ -1,7 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0;net10.0;netstandard2.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net9.0;net10.0;net10.0-browser;netstandard2.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -9,6 +9,11 @@
     <IsAotCompatible Condition="'$(TargetFramework)' == 'netstandard2.0'"></IsAotCompatible>
     <PackageId>CarpaNet.OAuth</PackageId>
     <Description>.NET ATProtocol OAuth Implementation Library for CarpaNet.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'browser'">
+    <DefineConstants>$(DefineConstants);BROWSER</DefineConstants>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,7 +25,19 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
-  <ItemGroup Condition=" ('$(IsPackable)' == 'true') or ('$(PackAsTool)' == 'true') ">
+  <!-- Exclude browser-only files from non-browser TFMs -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'browser'">
+    <Compile Remove="Crypto/BrowserCryptoProvider.cs" />
+    <Compile Remove="Crypto/BrowserCryptoInterop.cs" />
+    <None Remove="Crypto/carpanet-crypto.mjs" />
+  </ItemGroup>
+
+  <!-- Exclude desktop crypto provider from browser TFM -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'browser'">
+    <Compile Remove="Crypto/EcdsaCryptoProvider.cs" />
+  </ItemGroup>
+
+<ItemGroup Condition=" ('$(IsPackable)' == 'true') or ('$(PackAsTool)' == 'true') ">
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath=""
       Visible="false" />
   </ItemGroup>

@@ -108,7 +108,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         _logger.LogDebug("OAuth GET {Nsid}", nsid);
 
         var url = (await XrpcHttpHandler.BuildUrlAsync(BaseUrl, nsid, parameters, _identityResolver, cancellationToken).ConfigureAwait(false)).ToString();
-        using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Get, url);
+        using var request = await _tokenProvider.CreateDPoPRequestAsync(HttpMethod.Get, url).ConfigureAwait(false);
         XrpcHttpHandler.AddCommonHeaders(request, null, LabelerDids);
 
         var response = await SendWithRetryAsync(request, url, cancellationToken).ConfigureAwait(false);
@@ -125,7 +125,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         ThrowIfDisposed();
 
         var url = (await XrpcHttpHandler.BuildUrlAsync(BaseUrl, nsid, parameters, _identityResolver, cancellationToken).ConfigureAwait(false)).ToString();
-        using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Get, url);
+        using var request = await _tokenProvider.CreateDPoPRequestAsync(HttpMethod.Get, url).ConfigureAwait(false);
         XrpcHttpHandler.AddCommonHeaders(request, proxyServiceDid, LabelerDids);
 
         var response = await SendWithRetryAsync(request, url, cancellationToken).ConfigureAwait(false);
@@ -142,7 +142,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         _logger.LogDebug("OAuth POST {Nsid}", nsid);
 
         var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid).ToString();
-        using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Post, url);
+        using var request = await _tokenProvider.CreateDPoPRequestAsync(HttpMethod.Post, url).ConfigureAwait(false);
         XrpcHttpHandler.AddCommonHeaders(request, null, LabelerDids);
 
         if (input != null)
@@ -166,7 +166,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         ThrowIfDisposed();
 
         var url = XrpcHttpHandler.BuildUrl(BaseUrl, nsid).ToString();
-        using var request = _tokenProvider.CreateDPoPRequest(HttpMethod.Post, url);
+        using var request = await _tokenProvider.CreateDPoPRequestAsync(HttpMethod.Post, url).ConfigureAwait(false);
         XrpcHttpHandler.AddCommonHeaders(request, proxyServiceDid, LabelerDids);
 
         if (input != null)
@@ -220,7 +220,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
             await _tokenProvider.RefreshAsync(cancellationToken).ConfigureAwait(false);
 
             // Create a new request (can't reuse the old one)
-            using var retryRequest = _tokenProvider.CreateDPoPRequest(request.Method, url);
+            using var retryRequest = await _tokenProvider.CreateDPoPRequestAsync(request.Method, url).ConfigureAwait(false);
 
             if (request.Content != null)
             {
