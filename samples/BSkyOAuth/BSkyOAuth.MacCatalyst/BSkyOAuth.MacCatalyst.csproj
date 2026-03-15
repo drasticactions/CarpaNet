@@ -12,6 +12,7 @@
     <SupportedOSPlatformVersion>18.0</SupportedOSPlatformVersion>
     <ValidateXcodeVersion>false</ValidateXcodeVersion>
     <UseInterpreter>true</UseInterpreter>
+    <NoWarn>$(NoWarn);CS8002</NoWarn>
 
     <!--
       Enable full trimming in Release mode.
