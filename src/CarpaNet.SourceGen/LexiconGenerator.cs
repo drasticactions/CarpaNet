@@ -40,6 +40,11 @@ public sealed class GeneratorOptions
     /// Name of the generated JSON resolver context class. Default is "ATProtoJsonContext".
     /// </summary>
     public string JsonContextName { get; set; } = "ATProtoJsonContext";
+
+    /// <summary>
+    /// Whether to emit XRPC server endpoint controllers. Default is false.
+    /// </summary>
+    public bool EmitXrpcEndpoints { get; set; } = false;
 }
 
 /// <summary>
@@ -100,6 +105,12 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                 && !string.IsNullOrWhiteSpace(jsonContextName))
             {
                 options.JsonContextName = jsonContextName;
+            }
+
+            if (provider.GlobalOptions.TryGetValue("build_property.CarpaNet_EmitXrpcEndpoints", out var emitXrpc)
+                && bool.TryParse(emitXrpc, out var emitXrpcValue))
+            {
+                options.EmitXrpcEndpoints = emitXrpcValue;
             }
 
             return options;
@@ -205,7 +216,17 @@ public sealed class LexiconGenerator : IIncrementalGenerator
             context.AddSource("ATProtoClientFactory.g.cs", SourceText.From(factorySource, Encoding.UTF8));
         }
 
-        // PHASE 8: Report diagnostics for unresolved lexicon references
+        // PHASE 8: Generate XRPC endpoint controllers (opt-in)
+        if (options.EmitXrpcEndpoints)
+        {
+            var xrpcSource = XrpcEndpointGenerator.Generate(byNamespace, registry, options);
+            if (!string.IsNullOrEmpty(xrpcSource))
+            {
+                context.AddSource("XrpcControllers.g.cs", SourceText.From(xrpcSource, Encoding.UTF8));
+            }
+        }
+
+        // PHASE 9: Report diagnostics for unresolved lexicon references
         var unresolvedRefs = registry.GetUnresolvedReferences();
         if (unresolvedRefs.Count > 0)
         {
