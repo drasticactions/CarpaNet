@@ -4,12 +4,14 @@
     <Project Path="src/CarpaNet.OAuth/CarpaNet.OAuth.csproj" />
     <Project Path="src/CarpaNet.SourceGen/CarpaNet.SourceGen.csproj" />
     <Project Path="src/CarpaNet/CarpaNet.csproj" />
+    <Project Path="src/CarpaNet.AspNetCore/CarpaNet.AspNetCore.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/AuthTest/AuthTest.csproj" />
     <Project Path="samples/FirehoseTest/FirehoseTest.csproj" />
     <Project Path="samples/JetstreamTest/JetstreamTest.csproj" />
     <Project Path="samples/RemoteResolution/RemoteResolution.csproj" />
+    <Project Path="samples/XrpcServer/XrpcServer.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CarpaNet.UnitTests/CarpaNet.UnitTests.csproj" />

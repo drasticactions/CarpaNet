@@ -33,6 +33,7 @@
     <CompilerVisibleProperty Include="CarpaNet_SourceGen_EmitValidationAttributes" />
     <CompilerVisibleProperty Include="CarpaNet_SourceGen_CborContextName" />
     <CompilerVisibleProperty Include="CarpaNet_SourceGen_JsonContextName" />
+    <CompilerVisibleProperty Include="CarpaNet_EmitXrpcEndpoints" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CarpaNet_EmitValidationAttributes>true</CarpaNet_EmitValidationAttributes>
+    <CarpaNet_EmitXrpcEndpoints>true</CarpaNet_EmitXrpcEndpoints>
+    <CarpaNet_JsonContextName>ATProtoJsonContext</CarpaNet_JsonContextName>
+    <CarpaNet_LexiconAutoResolve>true</CarpaNet_LexiconAutoResolve>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/CarpaNet/CarpaNet.csproj" />
+    <ProjectReference Include="../../src/CarpaNet.AspNetCore/CarpaNet.AspNetCore.csproj" />
+    <ProjectReference Include="../../src/CarpaNet.SourceGen/CarpaNet.SourceGen.csproj"
+      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Import Project="..\..\src\CarpaNet\build\CarpaNet.targets" />
+
+  <ItemGroup>
+    <LexiconResolve Include="com.atproto.server.describeServer" />
+    <LexiconResolve Include="com.atproto.identity.resolveHandle" />
+  </ItemGroup>
+
+</Project>
