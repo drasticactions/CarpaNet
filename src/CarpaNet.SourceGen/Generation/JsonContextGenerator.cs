@@ -86,7 +86,7 @@ public static class JsonContextGenerator
         if (isRecord)
         {
             collectedPropertyTypes?.Add("string");
-            sb.AppendLine($"var prop_type = global::System.Text.Json.Serialization.Metadata.JsonMetadataServices.CreatePropertyInfo<string>(options, new global::System.Text.Json.Serialization.Metadata.JsonPropertyInfoValues<string>()");
+            sb.AppendLine($"var prop__dtype = global::System.Text.Json.Serialization.Metadata.JsonMetadataServices.CreatePropertyInfo<string>(options, new global::System.Text.Json.Serialization.Metadata.JsonPropertyInfoValues<string>()");
             sb.OpenBrace();
             sb.AppendLine("IsProperty = true,");
             sb.AppendLine("IsPublic = true,");
@@ -122,6 +122,13 @@ public static class JsonContextGenerator
             if (propName.Equals(cleanClassName, System.StringComparison.OrdinalIgnoreCase))
             {
                 propName = propName + "Value";
+            }
+
+            // Records auto-generate a "Type" property for the $type discriminator,
+            // so rename any lexicon property that would also become "Type"
+            if (isRecord && propName == "Type")
+            {
+                propName = "TypeValue";
             }
 
             propName = NsidHelper.EscapeIdentifier(propName);
@@ -175,7 +182,7 @@ public static class JsonContextGenerator
         sb.Append("return new global::System.Text.Json.Serialization.Metadata.JsonPropertyInfo[] { ");
         if (isRecord)
         {
-            sb.Append("prop_type, ");
+            sb.Append("prop__dtype, ");
         }
 
         for (int i = 0; i < propList.Count; i++)
