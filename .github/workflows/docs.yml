@@ -1,0 +1,51 @@
+name: Deploy Docs
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+    paths:
+      - 'docs/**'
+      - 'src/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-docs:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        global-json-file: global.json
+
+    - name: Install docfx
+      run: dotnet tool install -g docfx
+
+    - name: Build docs
+      run: docfx docs/docfx.json
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: 'docs/_site'
+
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4

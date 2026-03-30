@@ -1,0 +1,52 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "src": "..",
+          "files": [
+            "src/CarpaNet/*.csproj",
+            "src/CarpaNet.OAuth/*.csproj",
+            "src/CarpaNet.Jetstream/*.csproj",
+            "src/CarpaNet.AspNetCore/*.csproj"
+          ]
+        }
+      ],
+      "dest": "api",
+      "outputFormat": "apiPage"
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": [
+          "**/*.{md,yml}"
+        ],
+        "exclude": [
+          "_site/**"
+        ]
+      }
+    ],
+    "resource": [
+      {
+        "files": [
+          "images/**",
+          "favicon.png"
+        ]
+      }
+    ],
+    "output": "_site",
+    "template": [
+      "default",
+      "modern",
+      "carpanet"
+    ],
+    "postProcessors": [ "ExtractSearchIndex" ],
+    "globalMetadata": {
+      "_appName": "CarpaNet",
+      "_appTitle": "CarpaNet",
+      "_enableSearch": true,
+      "_appFaviconPath": "favicon.png"
+    }
+  }
+}
