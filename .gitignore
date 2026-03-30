@@ -482,3 +482,7 @@ $RECYCLE.BIN/
 *.swp
 
 .serena/
+
+# DocFX generated site
+docs/_site/
+docs/api/

@@ -101,6 +101,13 @@ public static class CborContextGenerator
                 propName = propName + "Value";
             }
 
+            // Records auto-generate a "Type" property for the $type discriminator,
+            // so rename any lexicon property that would also become "Type"
+            if (isRecord && propName == "Type")
+            {
+                propName = "TypeValue";
+            }
+
             propName = NsidHelper.EscapeIdentifier(propName);
 
             var propType = GetPropertyCSharpType(prop.Value, currentNsid, registry, shortClassName, prop.Key, typeNamespace);

@@ -63,7 +63,7 @@ public static class ObjectGenerator
 
         foreach (var prop in properties)
         {
-            GenerateProperty(sb, className, prop.Key, prop.Value, currentNsid, registry, requiredProps, nullableProps);
+            GenerateProperty(sb, className, prop.Key, prop.Value, currentNsid, registry, requiredProps, nullableProps, isRecord);
         }
 
         sb.CloseBrace();
@@ -111,7 +111,8 @@ public static class ObjectGenerator
         string currentNsid,
         TypeRegistry registry,
         List<string> requiredProps,
-        List<string> nullableProps)
+        List<string> nullableProps,
+        bool isRecord = false)
     {
         var isRequired = requiredProps.Contains(propertyName) || def.IsRequired;
         var isNullable = nullableProps.Contains(propertyName) || !isRequired;
@@ -123,6 +124,13 @@ public static class ObjectGenerator
         if (csharpName.Equals(cleanClassName, StringComparison.OrdinalIgnoreCase))
         {
             csharpName = csharpName + "Value";
+        }
+
+        // Records auto-generate a "Type" property for the $type discriminator,
+        // so rename any lexicon property that would also become "Type"
+        if (isRecord && csharpName == "Type")
+        {
+            csharpName = "TypeValue";
         }
 
         csharpName = NsidHelper.EscapeIdentifier(csharpName);
