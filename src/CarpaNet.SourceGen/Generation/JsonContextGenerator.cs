@@ -799,7 +799,7 @@ public static class JsonContextGenerator
         dispatchLines.Add($"if (type == typeof({globalList})) return Create_BuiltIn_{safeName}_TypeInfo(options);");
     }
 
-    private static string ToBuiltInSuffix(string typeName)
+    internal static string ToBuiltInSuffix(string typeName)
     {
         return typeName switch
         {
@@ -809,7 +809,7 @@ public static class JsonContextGenerator
             "int" => "Int32",
             "byte[]" => "ByteArray",
             "object" => "Object",
-            _ => typeName.Replace(".", "_").Replace("@", "")
+            _ => typeName.Replace(".", "_").Replace("@", "").Replace("<", "_").Replace(">", "_")
         };
     }
 }
