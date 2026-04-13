@@ -1,0 +1,677 @@
+{
+  "lexicon": 1,
+  "id": "social.mebibyte.bff.defs",
+  "description": "Shared definitions for the Byte File Format (bff): colors, frames, transforms, and the renderable object variants. Because Lexicon has no float primitive, float-valued scalars and float-array entries are typed as `unknown`; consumers must enforce ranges (color channels and opacity in [0.0, 1.0], size/padding > 0, etc.). The bff `type` discriminator is replaced by atproto's `$type` when records are serialized.",
+  "defs": {
+    "color": {
+      "type": "array",
+      "description": "RGBA color expressed as four floats in [0.0, 1.0]: [R, G, B, A].",
+      "items": {
+        "type": "string",
+        "description": "Encoded as a decimal string because Lexicon lacks a float primitive.",
+        "maxLength": 32
+      },
+      "minLength": 4,
+      "maxLength": 4
+    },
+    "frame": {
+      "type": "array",
+      "description": "Position and size of an object: [X, Y, WIDTH, HEIGHT] in points on the 324x570 stage.",
+      "items": {
+        "type": "string",
+        "description": "Encoded as a decimal string because Lexicon lacks a float primitive.",
+        "maxLength": 32
+      },
+      "minLength": 4,
+      "maxLength": 4
+    },
+    "transformRow": {
+      "type": "array",
+      "description": "One row of a 3x2 affine transform: [A, B] (or [C, D], or [TX, TY]).",
+      "items": {
+        "type": "string",
+        "description": "Encoded as a decimal string because Lexicon lacks a float primitive.",
+        "maxLength": 32
+      },
+      "minLength": 2,
+      "maxLength": 2
+    },
+    "transform": {
+      "type": "array",
+      "description": "Top two rows of a 3x3 affine transformation matrix applied after `frame` is set: [[A, B], [C, D], [TX, TY]].",
+      "items": {
+        "type": "ref",
+        "ref": "#transformRow"
+      },
+      "minLength": 3,
+      "maxLength": 3
+    },
+    "effect": {
+      "type": "string",
+      "description": "Animation effect id applied to an object and looped indefinitely. Multiple effects can be combined.",
+      "knownValues": [
+        "sin",
+        "cos",
+        "wave",
+        "rotate",
+        "soon",
+        "fireworks"
+      ],
+      "maxLength": 512
+    },
+    "textAttribute": {
+      "type": "object",
+      "description": "A styling attribute applied to a substring of paragraph text.",
+      "required": [
+        "type",
+        "range"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "bold",
+            "italic",
+            "bold-italic"
+          ],
+          "maxLength": 32
+        },
+        "range": {
+          "type": "array",
+          "description": "[startIndex, length] in utf16 code units.",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "minLength": 2,
+          "maxLength": 2
+        }
+      }
+    },
+    "paragraph": {
+      "type": "object",
+      "description": "The Paragraph object renders text that flows and automatically wraps inside its frame. Best for text longer than 1-3 words.",
+      "required": [
+        "frame",
+        "text"
+      ],
+      "properties": {
+        "frame": {
+          "type": "ref",
+          "ref": "#frame"
+        },
+        "name": {
+          "type": "string",
+          "description": "A unique name or ID for the object. Case sensitive.",
+          "maxLength": 256
+        },
+        "transform": {
+          "type": "ref",
+          "ref": "#transform"
+        },
+        "opacity": {
+          "type": "string",
+          "description": "Alpha value as a float in [0.0, 1.0]. Encoded as a decimal string because Lexicon lacks a float primitive.",
+          "maxLength": 32
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#effect"
+          }
+        },
+        "originalSrc": {
+          "type": "string",
+          "format": "uri",
+          "description": "Optional web url linking to the original source of the object.",
+          "maxLength": 2048
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The text to render. Cannot be purely whitespace.",
+          "maxLength": 3000
+        },
+        "color": {
+          "type": "ref",
+          "ref": "#color"
+        },
+        "style": {
+          "type": "string",
+          "description": "Font style. Paragraph supports sans or serif.",
+          "knownValues": [
+            "sans",
+            "serif"
+          ],
+          "default": "sans",
+          "maxLength": 32
+        },
+        "size": {
+          "type": "string",
+          "description": "Point size to render the text as a float > 0. Default 17.0. Encoded as a decimal string because Lexicon lacks a float primitive.",
+          "maxLength": 32
+        },
+        "alignment": {
+          "type": "string",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ],
+          "default": "left",
+          "maxLength": 16
+        },
+        "attributes": {
+          "type": "array",
+          "description": "Styling attributes applied to ranges of the text (bold, italic, bold-italic).",
+          "items": {
+            "type": "ref",
+            "ref": "#textAttribute"
+          }
+        }
+      }
+    },
+    "text": {
+      "type": "object",
+      "description": "The Text object renders text that dynamically resizes to fill its frame. Always centered. Best for 1-3 words.",
+      "required": [
+        "frame",
+        "text"
+      ],
+      "properties": {
+        "frame": {
+          "type": "ref",
+          "ref": "#frame"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "transform": {
+          "type": "ref",
+          "ref": "#transform"
+        },
+        "opacity": {
+          "type": "string",
+          "description": "Alpha value as a float in [0.0, 1.0]. Encoded as a decimal string because Lexicon lacks a float primitive.",
+          "maxLength": 32
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#effect"
+          }
+        },
+        "originalSrc": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The text to render. Cannot be purely whitespace.",
+          "maxLength": 3000
+        },
+        "color": {
+          "type": "ref",
+          "ref": "#color"
+        },
+        "style": {
+          "type": "string",
+          "description": "Font style. Text supports a wider range of display faces than Paragraph.",
+          "knownValues": [
+            "sans",
+            "serif",
+            "mono",
+            "eightbit",
+            "punchout",
+            "cursive",
+            "poster",
+            "tape",
+            "book"
+          ],
+          "default": "sans",
+          "maxLength": 32
+        },
+        "wordWrap": {
+          "type": "string",
+          "description": "Wrapping policy. `auto` lets the renderer decide; `manual` only wraps at explicit line breaks. Serialized as `word-wrap` in legacy bff.",
+          "enum": [
+            "auto",
+            "manual"
+          ],
+          "default": "auto",
+          "maxLength": 16
+        },
+        "padding": {
+          "type": "string",
+          "description": "Padding (float >= 0) applied inside the frame while sizing the text. Default 20.0. Encoded as a decimal string because Lexicon lacks a float primitive.",
+          "maxLength": 32
+        }
+      }
+    },
+    "link": {
+      "type": "object",
+      "description": "A pressable object that redirects the viewer to another Byte or website.",
+      "required": [
+        "frame",
+        "url"
+      ],
+      "properties": {
+        "frame": {
+          "type": "ref",
+          "ref": "#frame"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "transform": {
+          "type": "ref",
+          "ref": "#transform"
+        },
+        "opacity": {
+          "type": "string",
+          "description": "Alpha value as a float in [0.0, 1.0]. Encoded as a decimal string because Lexicon lacks a float primitive.",
+          "maxLength": 32
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#effect"
+          }
+        },
+        "originalSrc": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Destination URL. Both `byte://` and `http(s)://` are supported. Use `byte://byte.{BYTE_ID}` to link to a Byte by id.",
+          "maxLength": 2048
+        },
+        "title": {
+          "type": "string",
+          "description": "Title shown on the link.",
+          "maxLength": 300
+        },
+        "description": {
+          "type": "string",
+          "description": "Short description of the destination content.",
+          "maxLength": 1000
+        },
+        "color": {
+          "type": "ref",
+          "ref": "#color"
+        },
+        "style": {
+          "type": "string",
+          "knownValues": [
+            "sans",
+            "serif"
+          ],
+          "default": "sans",
+          "maxLength": 32
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "description": "An inline PNG, JPEG, or BMP image.",
+      "required": [
+        "frame",
+        "src"
+      ],
+      "properties": {
+        "frame": {
+          "type": "ref",
+          "ref": "#frame"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "transform": {
+          "type": "ref",
+          "ref": "#transform"
+        },
+        "opacity": {
+          "type": "string",
+          "description": "Alpha value as a float in [0.0, 1.0]. Encoded as a decimal string because Lexicon lacks a float primitive.",
+          "maxLength": 32
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#effect"
+          }
+        },
+        "originalSrc": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "src": {
+          "type": "blob",
+          "description": "The image asset (PNG, JPEG, or BMP).",
+          "accept": ["image/png", "image/jpeg", "image/bmp"],
+          "maxSize": 2000000
+        },
+        "scaleMode": {
+          "type": "string",
+          "description": "How the image is resized inside its frame.",
+          "enum": [
+            "fit",
+            "fill"
+          ],
+          "default": "fill",
+          "maxLength": 16
+        }
+      }
+    },
+    "graphic": {
+      "type": "object",
+      "description": "A monochromatic PNG that can be dynamically tinted. Always scales to fit its frame.",
+      "required": [
+        "frame",
+        "src"
+      ],
+      "properties": {
+        "frame": {
+          "type": "ref",
+          "ref": "#frame"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "transform": {
+          "type": "ref",
+          "ref": "#transform"
+        },
+        "opacity": {
+          "type": "string",
+          "description": "Alpha value as a float in [0.0, 1.0]. Encoded as a decimal string because Lexicon lacks a float primitive.",
+          "maxLength": 32
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#effect"
+          }
+        },
+        "originalSrc": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "src": {
+          "type": "blob",
+          "description": "The monochrome PNG asset.",
+          "accept": ["image/png"],
+          "maxSize": 1000000
+        },
+        "color": {
+          "type": "ref",
+          "ref": "#color"
+        }
+      }
+    },
+    "gif": {
+      "type": "object",
+      "description": "An inline animated GIF.",
+      "required": [
+        "frame",
+        "src"
+      ],
+      "properties": {
+        "frame": {
+          "type": "ref",
+          "ref": "#frame"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "transform": {
+          "type": "ref",
+          "ref": "#transform"
+        },
+        "opacity": {
+          "type": "string",
+          "description": "Alpha value as a float in [0.0, 1.0]. Encoded as a decimal string because Lexicon lacks a float primitive.",
+          "maxLength": 32
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#effect"
+          }
+        },
+        "originalSrc": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "src": {
+          "type": "blob",
+          "description": "The GIF asset.",
+          "accept": ["image/gif"],
+          "maxSize": 4000000
+        },
+        "scaleMode": {
+          "type": "string",
+          "enum": [
+            "fit",
+            "fill"
+          ],
+          "default": "fit",
+          "maxLength": 16
+        }
+      }
+    },
+    "video": {
+      "type": "object",
+      "description": "An inline MP4 video. Videos autoplay and loop on completion; 10 seconds or less is recommended.",
+      "required": [
+        "frame",
+        "src"
+      ],
+      "properties": {
+        "frame": {
+          "type": "ref",
+          "ref": "#frame"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "transform": {
+          "type": "ref",
+          "ref": "#transform"
+        },
+        "opacity": {
+          "type": "string",
+          "description": "Alpha value as a float in [0.0, 1.0]. Encoded as a decimal string because Lexicon lacks a float primitive.",
+          "maxLength": 32
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#effect"
+          }
+        },
+        "originalSrc": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "src": {
+          "type": "blob",
+          "description": "The MP4 video asset.",
+          "accept": ["video/mp4"],
+          "maxSize": 50000000
+        },
+        "muted": {
+          "type": "boolean",
+          "description": "Whether the video should play with sound muted.",
+          "default": true
+        }
+      }
+    },
+    "musicHit": {
+      "type": "object",
+      "description": "A single note or drum hit inside a music beat.",
+      "required": [
+        "time",
+        "type",
+        "bank",
+        "note",
+        "velo",
+        "duration"
+      ],
+      "properties": {
+        "time": {
+          "type": "string",
+          "description": "Time offset in bars as a float >= 0. May be subdivided to half/quarter/8th/16th/32nd notes. Encoded as a decimal string because Lexicon lacks a float primitive.",
+          "maxLength": 32
+        },
+        "type": {
+          "type": "integer",
+          "description": "0 = instrument, 1 = drum.",
+          "enum": [
+            0,
+            1
+          ]
+        },
+        "bank": {
+          "type": "string",
+          "description": "When `type` is 0, the instrument bank (e.g. bleep, meow, bass). When `type` is 1, always 'drums'.",
+          "knownValues": [
+            "bleep",
+            "meow",
+            "bass",
+            "ping",
+            "string",
+            "reso",
+            "arp",
+            "bark",
+            "mono1",
+            "mono2",
+            "mono3",
+            "funk",
+            "sax",
+            "bell",
+            "roboto",
+            "do",
+            "drums"
+          ],
+          "maxLength": 16
+        },
+        "note": {
+          "type": "string",
+          "description": "When `type` is 0, a pitch like 'B/3' or 'C#/3' (A/-1 through G/8). When `type` is 1, a drum name like 'Kick' or 'Snare'.",
+          "maxLength": 16
+        },
+        "velo": {
+          "type": "integer",
+          "description": "Velocity (loudness) from 0 to 127.",
+          "minimum": 0,
+          "maximum": 127
+        },
+        "duration": {
+          "type": "string",
+          "description": "Duration in bars as a float > 0. Unsupported in current renderers; should be 1. Encoded as a decimal string because Lexicon lacks a float primitive.",
+          "maxLength": 32
+        }
+      }
+    },
+    "musicBeat": {
+      "type": "object",
+      "description": "A single beat of a music sequence. Wraps the hit array because Lexicon arrays cannot nest directly. The beat's position in `music.instructions` determines its point on the 4:4 timeline.",
+      "required": [
+        "hits"
+      ],
+      "properties": {
+        "hits": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#musicHit"
+          }
+        }
+      }
+    },
+    "music": {
+      "type": "object",
+      "description": "A MIDI-style sequence played by the Byte soundfont. Autoplays and loops. Only one music object is permitted per Byte.",
+      "required": [
+        "frame",
+        "bpm",
+        "length",
+        "instructions"
+      ],
+      "properties": {
+        "frame": {
+          "type": "ref",
+          "ref": "#frame"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "transform": {
+          "type": "ref",
+          "ref": "#transform"
+        },
+        "opacity": {
+          "type": "string",
+          "description": "Alpha value as a float in [0.0, 1.0]. Encoded as a decimal string because Lexicon lacks a float primitive.",
+          "maxLength": 32
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#effect"
+          }
+        },
+        "originalSrc": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "bpm": {
+          "type": "integer",
+          "description": "Beats per minute. Must be greater than 0.",
+          "minimum": 1
+        },
+        "length": {
+          "type": "integer",
+          "description": "Length of the sequence in bars. Valid values are 2-16 and must be a multiple of 2.",
+          "minimum": 2,
+          "maximum": 16
+        },
+        "instructions": {
+          "type": "array",
+          "description": "The beats of the sequence. Length must be at least (length * 4).",
+          "items": {
+            "type": "ref",
+            "ref": "#musicBeat"
+          },
+          "minLength": 8
+        }
+      }
+    }
+  }
+}
