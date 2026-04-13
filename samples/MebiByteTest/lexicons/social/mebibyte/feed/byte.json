@@ -1,0 +1,59 @@
+{
+  "lexicon": 1,
+  "id": "social.mebibyte.feed.byte",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A Byte: a multimedia micro-scene authored in the Byte File Format (bff), rendered on a 324x570 stage with top-left-aligned coordinates.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["version", "objects", "createdAt"],
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "BFF version in 'MAJOR.MINOR' form. MAJOR bumps are incompatible with older renderers; MINOR bumps add backwards-compatible functionality.",
+            "default": "1.1",
+            "maxLength": 16
+          },
+          "background": {
+            "type": "array",
+            "description": "Background color(s) of the Byte. One entry is a solid fill; two entries form a linear gradient. Defaults to a single opaque white ([1,1,1,1]) if omitted.",
+            "items": { "type": "ref", "ref": "social.mebibyte.bff.defs#color" },
+            "minLength": 1,
+            "maxLength": 2
+          },
+          "objects": {
+            "type": "array",
+            "description": "Ordered list of renderable bff objects. Rendered back-to-front in array order.",
+            "items": {
+              "type": "union",
+              "refs": [
+                "social.mebibyte.bff.defs#paragraph",
+                "social.mebibyte.bff.defs#text",
+                "social.mebibyte.bff.defs#link",
+                "social.mebibyte.bff.defs#image",
+                "social.mebibyte.bff.defs#graphic",
+                "social.mebibyte.bff.defs#gif",
+                "social.mebibyte.bff.defs#video",
+                "social.mebibyte.bff.defs#music"
+              ],
+              "closed": false
+            }
+          },
+          "caption": {
+            "type": "string",
+            "description": "Optional caption shown alongside the Byte.",
+            "maxLength": 3000,
+            "maxGraphemes": 300
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Client-declared timestamp when this Byte was originally authored."
+          }
+        }
+      }
+    }
+  }
+}

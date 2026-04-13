@@ -537,6 +537,12 @@ public static class CborContextGenerator
                     return ListConverterRef(itemTypeName, CborTypeInfoRef(itemTypeName));
                 }
 
+                if (itemRefKind == LexiconTypeKind.Array)
+                {
+                    var innerConverter = GetConverterExpressionForArrayRef(items.Ref!, arrayNsid, registry);
+                    return ListConverterRef(itemTypeName, innerConverter);
+                }
+
                 var itemConverter = GetPrimitiveConverterForRef(items.Ref!, arrayNsid, registry);
                 return ListConverterRef(itemTypeName, itemConverter);
             }
