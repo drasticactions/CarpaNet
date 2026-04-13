@@ -604,6 +604,12 @@ public static class CborContextGenerator
                 return ListConverterRef(refType, CborTypeInfoRef(refType));
             }
 
+            if (refKind == LexiconTypeKind.Array)
+            {
+                var innerConverter = GetConverterExpressionForArrayRef(items.Ref!, currentNsid, registry);
+                return ListConverterRef(refType, innerConverter);
+            }
+
             var converter = GetPrimitiveConverterForRef(items.Ref!, currentNsid, registry);
             return ListConverterRef(refType, converter);
         }
