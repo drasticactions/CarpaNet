@@ -5,6 +5,7 @@
 
 # dotenv files
 .env
+*.lscache
 
 # User-specific files
 *.rsuser
