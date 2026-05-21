@@ -107,12 +107,12 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         ThrowIfDisposed();
         _logger.LogDebug("OAuth GET {Nsid}", nsid);
 
-        var url = (await XrpcHttpHandler.BuildUrlAsync(BaseUrl, nsid, parameters, _identityResolver, cancellationToken).ConfigureAwait(false)).ToString();
+        var url = (await XrpcHttpHandler.BuildUrlAsync(BaseUrl, nsid, parameters, _identityResolver, _logger, cancellationToken).ConfigureAwait(false)).ToString();
         using var request = await _tokenProvider.CreateDPoPRequestAsync(HttpMethod.Get, url).ConfigureAwait(false);
         XrpcHttpHandler.AddCommonHeaders(request, null, LabelerDids);
 
         var response = await SendWithRetryAsync(request, url, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, _logger, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -124,12 +124,12 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
     {
         ThrowIfDisposed();
 
-        var url = (await XrpcHttpHandler.BuildUrlAsync(BaseUrl, nsid, parameters, _identityResolver, cancellationToken).ConfigureAwait(false)).ToString();
+        var url = (await XrpcHttpHandler.BuildUrlAsync(BaseUrl, nsid, parameters, _identityResolver, _logger, cancellationToken).ConfigureAwait(false)).ToString();
         using var request = await _tokenProvider.CreateDPoPRequestAsync(HttpMethod.Get, url).ConfigureAwait(false);
         XrpcHttpHandler.AddCommonHeaders(request, proxyServiceDid, LabelerDids);
 
         var response = await SendWithRetryAsync(request, url, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, _logger, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -153,7 +153,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         }
 
         var response = await SendWithRetryAsync(request, url, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, _logger, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -177,7 +177,7 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IDisposable
         }
 
         var response = await SendWithRetryAsync(request, url, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, _logger, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

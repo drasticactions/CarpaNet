@@ -51,16 +51,16 @@ public static class ApiGenerator
                 new List<string>());
         }
 
-        // Generate ToDictionary method for converting to query parameters
-        GenerateToDictionaryMethod(sb, def.Parameters.Properties, requiredProps);
+        // Generate ToQueryParameters method for converting to query parameters
+        GenerateToQueryParametersMethod(sb, def.Parameters.Properties, requiredProps);
 
         sb.CloseBrace();
     }
 
     /// <summary>
-    /// Generates the ToDictionary method for a parameters class.
+    /// Generates the ToQueryParameters method for a parameters class.
     /// </summary>
-    private static void GenerateToDictionaryMethod(
+    private static void GenerateToQueryParametersMethod(
         SourceBuilder sb,
         Dictionary<string, LexiconDefinition> properties,
         List<string> requiredProps)
@@ -69,7 +69,7 @@ public static class ApiGenerator
         sb.WriteSummary("Converts the parameters to a sequence of key/value pairs for query string serialization. " +
             "Returns IEnumerable<KeyValuePair<string,string>> rather than a dictionary so that array properties " +
             "(e.g. uris on app.bsky.feed.getPosts) can emit repeated query parameters.");
-        sb.AppendLine("public System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, string>> ToDictionary()");
+        sb.AppendLine("public System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, string>> ToQueryParameters()");
         sb.OpenBrace();
         sb.AppendLine("var list = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, string>>();");
         sb.AppendLine();
@@ -479,7 +479,7 @@ public static class ApiGenerator
             sb.Indent();
             sb.AppendLine($"\"{currentNsid}\",");
             sb.AppendLine($"{proxyServiceDid},");
-            sb.AppendLine(hasParameters ? "parameters?.ToDictionary()," : "null,");
+            sb.AppendLine(hasParameters ? "parameters?.ToQueryParameters()," : "null,");
             sb.AppendLine("cancellationToken);");
             sb.Unindent();
         }
@@ -488,7 +488,7 @@ public static class ApiGenerator
             sb.AppendLine($"return await client.GetAsync<{outputType}>(");
             sb.Indent();
             sb.AppendLine($"\"{currentNsid}\",");
-            sb.AppendLine(hasParameters ? "parameters?.ToDictionary()," : "null,");
+            sb.AppendLine(hasParameters ? "parameters?.ToQueryParameters()," : "null,");
             sb.AppendLine("cancellationToken);");
             sb.Unindent();
         }
@@ -612,7 +612,7 @@ public static class ApiGenerator
         sb.AppendLine($"return client.SubscribeAsync<{currentNamespace}.{interfaceName}>(");
         sb.Indent();
         sb.AppendLine($"\"{currentNsid}\",");
-        sb.AppendLine(hasParameters ? "parameters?.ToDictionary()," : "null,");
+        sb.AppendLine(hasParameters ? "parameters?.ToQueryParameters()," : "null,");
         sb.AppendLine("cancellationToken);");
         sb.Unindent();
         sb.CloseBrace();

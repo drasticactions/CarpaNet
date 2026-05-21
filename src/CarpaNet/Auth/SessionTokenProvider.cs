@@ -140,7 +140,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
 
         if (!response.IsSuccessStatusCode)
         {
-            await XrpcHttpHandler.ThrowForErrorResponseAsync(response, cancellationToken).ConfigureAwait(false);
+            await XrpcHttpHandler.ThrowForErrorResponseAsync(response, _logger, cancellationToken).ConfigureAwait(false);
         }
 
 #if NET8_0_OR_GREATER
@@ -234,7 +234,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Session token refresh failed with HTTP {StatusCode}", (int)response.StatusCode);
-                await XrpcHttpHandler.ThrowForErrorResponseAsync(response, cancellationToken).ConfigureAwait(false);
+                await XrpcHttpHandler.ThrowForErrorResponseAsync(response, _logger, cancellationToken).ConfigureAwait(false);
             }
 
 #if NET8_0_OR_GREATER

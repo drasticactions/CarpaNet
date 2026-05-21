@@ -364,13 +364,13 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
 
         var url = await XrpcHttpHandler.BuildUrlAsync(
             this.TokenProvider?.PdsUrl ?? BaseUrl, nsid, parameters,
-            this.IdentityResolver, cancellationToken).ConfigureAwait(false);
+            this.IdentityResolver, _logger, cancellationToken).ConfigureAwait(false);
 
         using var request = XrpcHttpHandler.CreateGetRequest(url, proxyServiceDid: null, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
         var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, _logger, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -384,12 +384,12 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
 
         var url = await XrpcHttpHandler.BuildUrlAsync(
             this.TokenProvider?.PdsUrl ?? BaseUrl, nsid, parameters,
-            this.IdentityResolver, cancellationToken).ConfigureAwait(false);
+            this.IdentityResolver, _logger, cancellationToken).ConfigureAwait(false);
         using var request = XrpcHttpHandler.CreateGetRequest(url, proxyServiceDid, LabelerDids);
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
         var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, _logger, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -413,7 +413,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
         var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, _logger, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -437,7 +437,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
 
         var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, cancellationToken).ConfigureAwait(false);
+        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, _logger, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

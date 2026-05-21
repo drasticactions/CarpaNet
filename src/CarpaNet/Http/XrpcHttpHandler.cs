@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CarpaNet.Identity;
 using CarpaNet.Xrpc;
+using Microsoft.Extensions.Logging;
 
 namespace CarpaNet.Http;
 
@@ -82,43 +83,43 @@ public static class XrpcHttpHandler
         string nsid,
         IEnumerable<KeyValuePair<string, string>>? parameters = null,
         IdentityResolver? identityResolver = null,
+        ILogger? logger = null,
         CancellationToken cancellationToken = default)
     {
-        // Materialize once so we can both look up "repo" and pass through to BuildUrl
-        // without iterating a deferred enumerable twice.
-        List<KeyValuePair<string, string>>? materialized = null;
-        if (parameters != null)
+        // Only materialize when we need to both inspect "repo" and re-enumerate for BuildUrl.
+        // On the common path (no identity resolution), pass the enumerable straight through.
+        if (identityResolver == null || parameters == null)
         {
-            materialized = parameters as List<KeyValuePair<string, string>>
-                ?? new List<KeyValuePair<string, string>>(parameters);
+            return BuildUrl(baseUrl, nsid, parameters);
         }
 
-        if (identityResolver != null && materialized != null)
+        var materialized = parameters as ICollection<KeyValuePair<string, string>>
+            ?? new List<KeyValuePair<string, string>>(parameters);
+
+        string? repoValue = null;
+        foreach (var kvp in materialized)
         {
-            string? repoValue = null;
-            foreach (var kvp in materialized)
+            if (kvp.Key == "repo")
             {
-                if (kvp.Key == "repo")
+                repoValue = kvp.Value;
+                break;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(repoValue))
+        {
+            try
+            {
+                var didDoc = await identityResolver.ResolveAsync(repoValue!, cancellationToken).ConfigureAwait(false);
+                if (didDoc.PdsEndpoint != null)
                 {
-                    repoValue = kvp.Value;
-                    break;
+                    baseUrl = new Uri(didDoc.PdsEndpoint);
                 }
             }
-
-            if (!string.IsNullOrEmpty(repoValue))
+            catch (Exception ex)
             {
-                try
-                {
-                    var didDoc = await identityResolver.ResolveAsync(repoValue!, cancellationToken).ConfigureAwait(false);
-                    if (didDoc.PdsEndpoint != null)
-                    {
-                        baseUrl = new Uri(didDoc.PdsEndpoint);
-                    }
-                }
-                catch
-                {
-                    // Resolution failed — fall back to original baseUrl
-                }
+                // Resolution failed — fall back to original baseUrl
+                logger?.LogWarning(ex, "Identity resolution failed for repo {Repo}; falling back to base URL {BaseUrl}", repoValue, baseUrl);
             }
         }
 
@@ -214,12 +215,13 @@ public static class XrpcHttpHandler
     public static async Task<TOutput> ProcessResponseAsync<TOutput>(
         HttpResponseMessage response,
         JsonSerializerOptions jsonOptions,
+        ILogger? logger = null,
         CancellationToken cancellationToken = default)
     {
         // Check for errors first
         if (!response.IsSuccessStatusCode)
         {
-            await ThrowForErrorResponseAsync(response, cancellationToken).ConfigureAwait(false);
+            await ThrowForErrorResponseAsync(response, logger, cancellationToken).ConfigureAwait(false);
         }
 
         // Handle 204 No Content
@@ -256,6 +258,7 @@ public static class XrpcHttpHandler
     /// </summary>
     public static async Task ThrowForErrorResponseAsync(
         HttpResponseMessage response,
+        ILogger? logger = null,
         CancellationToken cancellationToken = default)
     {
         XrpcError? error = null;
@@ -275,9 +278,10 @@ public static class XrpcHttpHandler
 #endif
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Ignore deserialization errors - will use status code for message
+            logger?.LogDebug(ex, "Failed to deserialize XRPC error body for HTTP {StatusCode}; using default error message", (int)response.StatusCode);
         }
 
         var message = error?.GetFormattedMessage() ?? GetDefaultErrorMessage(response.StatusCode);

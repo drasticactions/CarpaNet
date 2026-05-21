@@ -296,7 +296,7 @@ await client.AppBskyActorGetProfileAsync(parameters);
 await client.ComAtprotoRepoCreateRecordAsync(input);
 ```
 
-Query parameters are gathered into a `*Parameters` class with a `ToDictionary()` method. Procedure inputs use an `*Input` class. Subscriptions generate `SubscribeAsync` extensions returning `IAsyncEnumerable<T>`.
+Query parameters are gathered into a `*Parameters` class with a `ToQueryParameters()` method returning `IEnumerable<KeyValuePair<string, string>>` (so array params like `uris` can emit repeated keys). Procedure inputs use an `*Input` class. Subscriptions generate `SubscribeAsync` extensions returning `IAsyncEnumerable<T>`.
 
 ### Union types (`UnionImplementations.g.cs`)
 
