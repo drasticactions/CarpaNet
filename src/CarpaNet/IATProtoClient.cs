@@ -80,7 +80,7 @@ public interface IATProtoClient
     /// <returns>The deserialized response.</returns>
     Task<TOutput> GetAsync<TOutput>(
         string nsid,
-        IReadOnlyDictionary<string, string>? parameters = null,
+        IEnumerable<KeyValuePair<string, string>>? parameters = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -99,7 +99,7 @@ public interface IATProtoClient
     Task<TOutput> GetAsync<TOutput>(
         string nsid,
         string proxyServiceDid,
-        IReadOnlyDictionary<string, string>? parameters = null,
+        IEnumerable<KeyValuePair<string, string>>? parameters = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -142,6 +142,6 @@ public interface IATProtoClient
     /// <returns>An async enumerable of messages.</returns>
     IAsyncEnumerable<TMessage> SubscribeAsync<TMessage>(
         string nsid,
-        IReadOnlyDictionary<string, string>? parameters = null,
+        IEnumerable<KeyValuePair<string, string>>? parameters = null,
         CancellationToken cancellationToken = default);
 }

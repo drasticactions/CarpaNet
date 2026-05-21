@@ -356,7 +356,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     /// <inheritdoc/>
     public async Task<TOutput> GetAsync<TOutput>(
         string nsid,
-        IReadOnlyDictionary<string, string>? parameters = null,
+        IEnumerable<KeyValuePair<string, string>>? parameters = null,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -377,7 +377,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     public async Task<TOutput> GetAsync<TOutput>(
         string nsid,
         string proxyServiceDid,
-        IReadOnlyDictionary<string, string>? parameters = null,
+        IEnumerable<KeyValuePair<string, string>>? parameters = null,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -443,7 +443,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     /// <inheritdoc/>
     public async IAsyncEnumerable<TMessage> SubscribeAsync<TMessage>(
         string nsid,
-        IReadOnlyDictionary<string, string>? parameters = null,
+        IEnumerable<KeyValuePair<string, string>>? parameters = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();

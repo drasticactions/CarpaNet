@@ -29,7 +29,7 @@ public static class XrpcHttpHandler
     /// <param name="nsid">The NSID of the endpoint.</param>
     /// <param name="parameters">Optional query parameters.</param>
     /// <returns>The complete URL.</returns>
-    public static Uri BuildUrl(Uri baseUrl, string nsid, IReadOnlyDictionary<string, string>? parameters = null)
+    public static Uri BuildUrl(Uri baseUrl, string nsid, IEnumerable<KeyValuePair<string, string>>? parameters = null)
     {
         if (string.IsNullOrEmpty(nsid))
             throw new ArgumentException("NSID cannot be null or empty.", nameof(nsid));
@@ -39,7 +39,7 @@ public static class XrpcHttpHandler
             Path = XrpcPathPrefix + nsid
         };
 
-        if (parameters != null && parameters.Count > 0)
+        if (parameters != null)
         {
             var queryBuilder = new StringBuilder();
             var first = true;
@@ -80,30 +80,49 @@ public static class XrpcHttpHandler
     public static async Task<Uri> BuildUrlAsync(
         Uri baseUrl,
         string nsid,
-        IReadOnlyDictionary<string, string>? parameters = null,
+        IEnumerable<KeyValuePair<string, string>>? parameters = null,
         IdentityResolver? identityResolver = null,
         CancellationToken cancellationToken = default)
     {
-        if (identityResolver != null
-            && parameters != null
-            && parameters.TryGetValue("repo", out var repoValue)
-            && !string.IsNullOrEmpty(repoValue))
+        // Materialize once so we can both look up "repo" and pass through to BuildUrl
+        // without iterating a deferred enumerable twice.
+        List<KeyValuePair<string, string>>? materialized = null;
+        if (parameters != null)
         {
-            try
+            materialized = parameters as List<KeyValuePair<string, string>>
+                ?? new List<KeyValuePair<string, string>>(parameters);
+        }
+
+        if (identityResolver != null && materialized != null)
+        {
+            string? repoValue = null;
+            foreach (var kvp in materialized)
             {
-                var didDoc = await identityResolver.ResolveAsync(repoValue, cancellationToken).ConfigureAwait(false);
-                if (didDoc.PdsEndpoint != null)
+                if (kvp.Key == "repo")
                 {
-                    baseUrl = new Uri(didDoc.PdsEndpoint);
+                    repoValue = kvp.Value;
+                    break;
                 }
             }
-            catch
+
+            if (!string.IsNullOrEmpty(repoValue))
             {
-                // Resolution failed — fall back to original baseUrl
+                try
+                {
+                    var didDoc = await identityResolver.ResolveAsync(repoValue!, cancellationToken).ConfigureAwait(false);
+                    if (didDoc.PdsEndpoint != null)
+                    {
+                        baseUrl = new Uri(didDoc.PdsEndpoint);
+                    }
+                }
+                catch
+                {
+                    // Resolution failed — fall back to original baseUrl
+                }
             }
         }
 
-        return BuildUrl(baseUrl, nsid, parameters);
+        return BuildUrl(baseUrl, nsid, materialized);
     }
 
     /// <summary>
@@ -113,7 +132,7 @@ public static class XrpcHttpHandler
     /// <param name="nsid">The NSID of the subscription endpoint.</param>
     /// <param name="parameters">Optional query parameters.</param>
     /// <returns>The WebSocket URL.</returns>
-    public static Uri BuildWebSocketUrl(Uri baseUrl, string nsid, IReadOnlyDictionary<string, string>? parameters = null)
+    public static Uri BuildWebSocketUrl(Uri baseUrl, string nsid, IEnumerable<KeyValuePair<string, string>>? parameters = null)
     {
         var url = BuildUrl(baseUrl, nsid, parameters);
         var uriBuilder = new UriBuilder(url);
