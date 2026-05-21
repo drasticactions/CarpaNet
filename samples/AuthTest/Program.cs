@@ -264,12 +264,13 @@ async Task AuthenticatedMenuAsync(IATProtoClient client, string? handle, string 
         Console.WriteLine("  1. Get my profile");
         Console.WriteLine("  2. Get my preferences");
         Console.WriteLine("  3. Get my timeline");
-        Console.WriteLine("  4. Get notifications");
-        Console.WriteLine("  5. Create a post");
-        Console.WriteLine("  6. Delete a post");
-        Console.WriteLine("  7. Save session");
-        Console.WriteLine("  8. Show session tokens");
-        Console.WriteLine("  9. Exit");
+        Console.WriteLine("  4. Get posts by URIs");
+        Console.WriteLine("  5. Get notifications");
+        Console.WriteLine("  6. Create a post");
+        Console.WriteLine("  7. Delete a post");
+        Console.WriteLine("  8. Save session");
+        Console.WriteLine("  9. Show session tokens");
+        Console.WriteLine("  10. Exit");
         Console.Write("> ");
 
         var choice = Console.ReadLine()?.Trim();
@@ -288,21 +289,24 @@ async Task AuthenticatedMenuAsync(IATProtoClient client, string? handle, string 
                     await GetTimelineAsync(client);
                     break;
                 case "4":
-                    await GetNotificationsAsync(client);
+                    await GetPostsAsync(client);
                     break;
                 case "5":
-                    await CreatePostAsync(client, did);
+                    await GetNotificationsAsync(client);
                     break;
                 case "6":
-                    await DeletePostAsync(client, did);
+                    await CreatePostAsync(client, did);
                     break;
                 case "7":
-                    SaveCurrentSession(client);
+                    await DeletePostAsync(client, did);
                     break;
                 case "8":
-                    await ShowSessionTokensAsync(client);
+                    SaveCurrentSession(client);
                     break;
                 case "9":
+                    await ShowSessionTokensAsync(client);
+                    break;
+                case "10":
                     return;
                 default:
                     Console.WriteLine("Invalid choice.");
@@ -352,6 +356,47 @@ async Task GetTimelineAsync(IATProtoClient client)
         {
             var author = item.Post?.Author;
             Console.WriteLine($"  - @{author?.Handle}: (post by {author?.DisplayName})");
+        }
+    }
+}
+
+async Task GetPostsAsync(IATProtoClient client)
+{
+    Console.WriteLine("Enter AT URIs (one per line, blank line to finish):");
+    var uris = new List<ATUri>();
+    while (true)
+    {
+        Console.Write("> ");
+        var line = Console.ReadLine()?.Trim();
+        if (string.IsNullOrEmpty(line))
+            break;
+
+        var uri = new ATUri(line);
+        if (!uri.IsValid)
+        {
+            Console.WriteLine($"  Skipped invalid URI: {line}");
+            continue;
+        }
+        uris.Add(uri);
+    }
+
+    if (uris.Count == 0)
+    {
+        Console.WriteLine("No URIs provided.");
+        return;
+    }
+
+    // Demonstrates the fix for https://github.com/drasticactions/CarpaNet/issues/12 —
+    // passing multiple URIs serializes as repeated query parameters (?uris=a&uris=b).
+    var parameters = new GetPostsParameters { Uris = uris };
+    var response = await client.AppBskyFeedGetPostsAsync(parameters);
+
+    Console.WriteLine($"  Returned posts: {response.Posts?.Count ?? 0}");
+    if (response.Posts != null)
+    {
+        foreach (var post in response.Posts)
+        {
+            Console.WriteLine($"  - @{post.Author?.Handle}: {post.Uri}");
         }
     }
 }

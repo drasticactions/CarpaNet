@@ -51,25 +51,27 @@ public static class ApiGenerator
                 new List<string>());
         }
 
-        // Generate ToDictionary method for converting to query parameters
-        GenerateToDictionaryMethod(sb, def.Parameters.Properties, requiredProps);
+        // Generate ToQueryParameters method for converting to query parameters
+        GenerateToQueryParametersMethod(sb, def.Parameters.Properties, requiredProps);
 
         sb.CloseBrace();
     }
 
     /// <summary>
-    /// Generates the ToDictionary method for a parameters class.
+    /// Generates the ToQueryParameters method for a parameters class.
     /// </summary>
-    private static void GenerateToDictionaryMethod(
+    private static void GenerateToQueryParametersMethod(
         SourceBuilder sb,
         Dictionary<string, LexiconDefinition> properties,
         List<string> requiredProps)
     {
         sb.AppendLine();
-        sb.WriteSummary("Converts the parameters to a dictionary for query string serialization.");
-        sb.AppendLine("public System.Collections.Generic.IReadOnlyDictionary<string, string> ToDictionary()");
+        sb.WriteSummary("Converts the parameters to a sequence of key/value pairs for query string serialization. " +
+            "Returns IEnumerable<KeyValuePair<string,string>> rather than a dictionary so that array properties " +
+            "(e.g. uris on app.bsky.feed.getPosts) can emit repeated query parameters.");
+        sb.AppendLine("public System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, string>> ToQueryParameters()");
         sb.OpenBrace();
-        sb.AppendLine("var dict = new System.Collections.Generic.Dictionary<string, string>();");
+        sb.AppendLine("var list = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, string>>();");
         sb.AppendLine();
 
         foreach (var prop in properties)
@@ -88,11 +90,11 @@ public static class ApiGenerator
                 sb.OpenBrace();
                 if (prop.Value.Items?.Type == "string")
                 {
-                    sb.AppendLine($"dict.Add(\"{jsonName}\", item);");
+                    sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", item));");
                 }
                 else
                 {
-                    sb.AppendLine($"dict.Add(\"{jsonName}\", item?.ToString() ?? \"\");");
+                    sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", item?.ToString() ?? \"\"));");
                 }
                 sb.CloseBrace();
                 sb.CloseBrace();
@@ -102,13 +104,13 @@ public static class ApiGenerator
             {
                 if (isRequired)
                 {
-                    sb.AppendLine($"dict[\"{jsonName}\"] = {propName}.ToString().ToLowerInvariant();");
+                    sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", {propName}.ToString().ToLowerInvariant()));");
                 }
                 else
                 {
                     sb.AppendLine($"if ({propName} != null)");
                     sb.OpenBrace();
-                    sb.AppendLine($"dict[\"{jsonName}\"] = {propName}.Value.ToString().ToLowerInvariant();");
+                    sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", {propName}.Value.ToString().ToLowerInvariant()));");
                     sb.CloseBrace();
                 }
             }
@@ -117,13 +119,13 @@ public static class ApiGenerator
             {
                 if (isRequired)
                 {
-                    sb.AppendLine($"dict[\"{jsonName}\"] = {propName}.ToString();");
+                    sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", {propName}.ToString()));");
                 }
                 else
                 {
                     sb.AppendLine($"if ({propName} != null)");
                     sb.OpenBrace();
-                    sb.AppendLine($"dict[\"{jsonName}\"] = {propName}.Value.ToString();");
+                    sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", {propName}.Value.ToString()));");
                     sb.CloseBrace();
                 }
             }
@@ -137,13 +139,13 @@ public static class ApiGenerator
                 {
                     if (isRequired)
                     {
-                        sb.AppendLine($"dict[\"{jsonName}\"] = {propName}.ToString(\"o\")!;");
+                        sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", {propName}.ToString(\"o\")!));");
                     }
                     else
                     {
                         sb.AppendLine($"if ({propName} != null)");
                         sb.OpenBrace();
-                        sb.AppendLine($"dict[\"{jsonName}\"] = {propName}.Value.ToString(\"o\")!;");
+                        sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", {propName}.Value.ToString(\"o\")!));");
                         sb.CloseBrace();
                     }
                 }
@@ -152,13 +154,13 @@ public static class ApiGenerator
                 {
                     if (isRequired)
                     {
-                        sb.AppendLine($"dict[\"{jsonName}\"] = {propName}.ToString()!;");
+                        sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", {propName}.ToString()!));");
                     }
                     else
                     {
                         sb.AppendLine($"if ({propName} != null)");
                         sb.OpenBrace();
-                        sb.AppendLine($"dict[\"{jsonName}\"] = {propName}.ToString()!;");
+                        sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", {propName}.ToString()!));");
                         sb.CloseBrace();
                     }
                 }
@@ -167,13 +169,13 @@ public static class ApiGenerator
                 {
                     if (isRequired)
                     {
-                        sb.AppendLine($"dict[\"{jsonName}\"] = {propName};");
+                        sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", {propName}));");
                     }
                     else
                     {
                         sb.AppendLine($"if ({propName} != null)");
                         sb.OpenBrace();
-                        sb.AppendLine($"dict[\"{jsonName}\"] = {propName};");
+                        sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", {propName}));");
                         sb.CloseBrace();
                     }
                 }
@@ -184,14 +186,14 @@ public static class ApiGenerator
                 if (isRequired)
                 {
                     // Required reference type - ToString() is safe
-                    sb.AppendLine($"dict[\"{jsonName}\"] = {propName}.ToString()!;");
+                    sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", {propName}.ToString()!));");
                 }
                 else
                 {
                     // Optional reference type - check for null first
                     sb.AppendLine($"if ({propName} != null)");
                     sb.OpenBrace();
-                    sb.AppendLine($"dict[\"{jsonName}\"] = {propName}.ToString()!;");
+                    sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", {propName}.ToString()!));");
                     sb.CloseBrace();
                 }
             }
@@ -199,7 +201,7 @@ public static class ApiGenerator
             sb.AppendLine();
         }
 
-        sb.AppendLine("return dict;");
+        sb.AppendLine("return list;");
         sb.CloseBrace();
     }
 
@@ -477,7 +479,7 @@ public static class ApiGenerator
             sb.Indent();
             sb.AppendLine($"\"{currentNsid}\",");
             sb.AppendLine($"{proxyServiceDid},");
-            sb.AppendLine(hasParameters ? "parameters?.ToDictionary()," : "null,");
+            sb.AppendLine(hasParameters ? "parameters?.ToQueryParameters()," : "null,");
             sb.AppendLine("cancellationToken);");
             sb.Unindent();
         }
@@ -486,7 +488,7 @@ public static class ApiGenerator
             sb.AppendLine($"return await client.GetAsync<{outputType}>(");
             sb.Indent();
             sb.AppendLine($"\"{currentNsid}\",");
-            sb.AppendLine(hasParameters ? "parameters?.ToDictionary()," : "null,");
+            sb.AppendLine(hasParameters ? "parameters?.ToQueryParameters()," : "null,");
             sb.AppendLine("cancellationToken);");
             sb.Unindent();
         }
@@ -610,7 +612,7 @@ public static class ApiGenerator
         sb.AppendLine($"return client.SubscribeAsync<{currentNamespace}.{interfaceName}>(");
         sb.Indent();
         sb.AppendLine($"\"{currentNsid}\",");
-        sb.AppendLine(hasParameters ? "parameters?.ToDictionary()," : "null,");
+        sb.AppendLine(hasParameters ? "parameters?.ToQueryParameters()," : "null,");
         sb.AppendLine("cancellationToken);");
         sb.Unindent();
         sb.CloseBrace();

@@ -416,10 +416,10 @@ public class ATProtoClientExtensionsTests
 
         public HttpClient HttpClient => throw new NotImplementedException();
 
-        public Task<TOutput> GetAsync<TOutput>(string nsid, IReadOnlyDictionary<string, string>? parameters = null, CancellationToken cancellationToken = default)
+        public Task<TOutput> GetAsync<TOutput>(string nsid, IEnumerable<KeyValuePair<string, string>>? parameters = null, CancellationToken cancellationToken = default)
             => throw new NotImplementedException();
 
-        public Task<TOutput> GetAsync<TOutput>(string nsid, string proxyServiceDid, IReadOnlyDictionary<string, string>? parameters = null, CancellationToken cancellationToken = default)
+        public Task<TOutput> GetAsync<TOutput>(string nsid, string proxyServiceDid, IEnumerable<KeyValuePair<string, string>>? parameters = null, CancellationToken cancellationToken = default)
             => throw new NotImplementedException();
 
         public Task<TOutput> PostAsync<TInput, TOutput>(string nsid, TInput? input, CancellationToken cancellationToken = default)
@@ -428,7 +428,7 @@ public class ATProtoClientExtensionsTests
         public Task<TOutput> PostAsync<TInput, TOutput>(string nsid, string proxyServiceDid, TInput? input, CancellationToken cancellationToken = default)
             => throw new NotImplementedException();
 
-        public IAsyncEnumerable<TMessage> SubscribeAsync<TMessage>(string nsid, IReadOnlyDictionary<string, string>? parameters = null, CancellationToken cancellationToken = default)
+        public IAsyncEnumerable<TMessage> SubscribeAsync<TMessage>(string nsid, IEnumerable<KeyValuePair<string, string>>? parameters = null, CancellationToken cancellationToken = default)
             => throw new NotImplementedException();
     }
 

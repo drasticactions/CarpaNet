@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CarpaNet.Identity;
 using CarpaNet.Xrpc;
+using Microsoft.Extensions.Logging;
 
 namespace CarpaNet.Http;
 
@@ -29,7 +30,7 @@ public static class XrpcHttpHandler
     /// <param name="nsid">The NSID of the endpoint.</param>
     /// <param name="parameters">Optional query parameters.</param>
     /// <returns>The complete URL.</returns>
-    public static Uri BuildUrl(Uri baseUrl, string nsid, IReadOnlyDictionary<string, string>? parameters = null)
+    public static Uri BuildUrl(Uri baseUrl, string nsid, IEnumerable<KeyValuePair<string, string>>? parameters = null)
     {
         if (string.IsNullOrEmpty(nsid))
             throw new ArgumentException("NSID cannot be null or empty.", nameof(nsid));
@@ -39,7 +40,7 @@ public static class XrpcHttpHandler
             Path = XrpcPathPrefix + nsid
         };
 
-        if (parameters != null && parameters.Count > 0)
+        if (parameters != null)
         {
             var queryBuilder = new StringBuilder();
             var first = true;
@@ -80,30 +81,49 @@ public static class XrpcHttpHandler
     public static async Task<Uri> BuildUrlAsync(
         Uri baseUrl,
         string nsid,
-        IReadOnlyDictionary<string, string>? parameters = null,
+        IEnumerable<KeyValuePair<string, string>>? parameters = null,
         IdentityResolver? identityResolver = null,
+        ILogger? logger = null,
         CancellationToken cancellationToken = default)
     {
-        if (identityResolver != null
-            && parameters != null
-            && parameters.TryGetValue("repo", out var repoValue)
-            && !string.IsNullOrEmpty(repoValue))
+        // Only materialize when we need to both inspect "repo" and re-enumerate for BuildUrl.
+        // On the common path (no identity resolution), pass the enumerable straight through.
+        if (identityResolver == null || parameters == null)
+        {
+            return BuildUrl(baseUrl, nsid, parameters);
+        }
+
+        var materialized = parameters as ICollection<KeyValuePair<string, string>>
+            ?? new List<KeyValuePair<string, string>>(parameters);
+
+        string? repoValue = null;
+        foreach (var kvp in materialized)
+        {
+            if (kvp.Key == "repo")
+            {
+                repoValue = kvp.Value;
+                break;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(repoValue))
         {
             try
             {
-                var didDoc = await identityResolver.ResolveAsync(repoValue, cancellationToken).ConfigureAwait(false);
+                var didDoc = await identityResolver.ResolveAsync(repoValue!, cancellationToken).ConfigureAwait(false);
                 if (didDoc.PdsEndpoint != null)
                 {
                     baseUrl = new Uri(didDoc.PdsEndpoint);
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // Resolution failed — fall back to original baseUrl
+                logger?.LogWarning(ex, "Identity resolution failed for repo {Repo}; falling back to base URL {BaseUrl}", repoValue, baseUrl);
             }
         }
 
-        return BuildUrl(baseUrl, nsid, parameters);
+        return BuildUrl(baseUrl, nsid, materialized);
     }
 
     /// <summary>
@@ -113,7 +133,7 @@ public static class XrpcHttpHandler
     /// <param name="nsid">The NSID of the subscription endpoint.</param>
     /// <param name="parameters">Optional query parameters.</param>
     /// <returns>The WebSocket URL.</returns>
-    public static Uri BuildWebSocketUrl(Uri baseUrl, string nsid, IReadOnlyDictionary<string, string>? parameters = null)
+    public static Uri BuildWebSocketUrl(Uri baseUrl, string nsid, IEnumerable<KeyValuePair<string, string>>? parameters = null)
     {
         var url = BuildUrl(baseUrl, nsid, parameters);
         var uriBuilder = new UriBuilder(url);
@@ -195,12 +215,13 @@ public static class XrpcHttpHandler
     public static async Task<TOutput> ProcessResponseAsync<TOutput>(
         HttpResponseMessage response,
         JsonSerializerOptions jsonOptions,
+        ILogger? logger = null,
         CancellationToken cancellationToken = default)
     {
         // Check for errors first
         if (!response.IsSuccessStatusCode)
         {
-            await ThrowForErrorResponseAsync(response, cancellationToken).ConfigureAwait(false);
+            await ThrowForErrorResponseAsync(response, logger, cancellationToken).ConfigureAwait(false);
         }
 
         // Handle 204 No Content
@@ -237,6 +258,7 @@ public static class XrpcHttpHandler
     /// </summary>
     public static async Task ThrowForErrorResponseAsync(
         HttpResponseMessage response,
+        ILogger? logger = null,
         CancellationToken cancellationToken = default)
     {
         XrpcError? error = null;
@@ -256,9 +278,10 @@ public static class XrpcHttpHandler
 #endif
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Ignore deserialization errors - will use status code for message
+            logger?.LogDebug(ex, "Failed to deserialize XRPC error body for HTTP {StatusCode}; using default error message", (int)response.StatusCode);
         }
 
         var message = error?.GetFormattedMessage() ?? GetDefaultErrorMessage(response.StatusCode);

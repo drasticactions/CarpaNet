@@ -26,6 +26,7 @@
     <LexiconResolve Include="app.bsky.actor.getProfile" />
     <LexiconResolve Include="app.bsky.actor.getPreferences" />
     <LexiconResolve Include="app.bsky.feed.getTimeline" />
+    <LexiconResolve Include="app.bsky.feed.getPosts" />
     <LexiconResolve Include="app.bsky.feed.post" />
     <LexiconResolve Include="app.bsky.notification.listNotifications" />
     <LexiconResolve Include="com.atproto.repo.createRecord" />

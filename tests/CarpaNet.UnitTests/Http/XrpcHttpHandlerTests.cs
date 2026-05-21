@@ -110,6 +110,43 @@ public class XrpcUrlBuildingTests
     }
 
     [Fact]
+    public async Task GetAsync_WithRepeatedKeys_EmitsRepeatedQueryParams()
+    {
+        Uri? capturedUri = null;
+        var handler = new MockHttpMessageHandler((request, ct) =>
+        {
+            capturedUri = request.RequestUri;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json")
+            });
+        });
+
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://bsky.social") };
+        using var client = CreateClient(httpClient, new Uri("https://bsky.social"));
+
+        var parameters = new List<KeyValuePair<string, string>>
+        {
+            new("uris", "at://did:plc:abc/app.bsky.feed.post/1"),
+            new("uris", "at://did:plc:abc/app.bsky.feed.post/2"),
+        };
+
+        await client.GetAsync<object>("app.bsky.feed.getPosts", parameters);
+
+        Assert.NotNull(capturedUri);
+        var query = capturedUri!.Query.TrimStart('?');
+        var urisCount = 0;
+        foreach (var pair in query.Split('&'))
+        {
+            if (pair.StartsWith("uris=", StringComparison.Ordinal))
+                urisCount++;
+        }
+        Assert.Equal(2, urisCount);
+        Assert.Contains("uris=at%3A%2F%2Fdid%3Aplc%3Aabc%2Fapp.bsky.feed.post%2F1", query);
+        Assert.Contains("uris=at%3A%2F%2Fdid%3Aplc%3Aabc%2Fapp.bsky.feed.post%2F2", query);
+    }
+
+    [Fact]
     public async Task GetAsync_WithEmptyParameterValue_SkipsParameter()
     {
         string? capturedUrl = null;
