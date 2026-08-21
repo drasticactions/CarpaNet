@@ -10,6 +10,7 @@
     <Project Path="samples/AuthTest/AuthTest.csproj" />
     <Project Path="samples/FirehoseTest/FirehoseTest.csproj" />
     <Project Path="samples/JetstreamTest/JetstreamTest.csproj" />
+    <Project Path="samples/JetstreamV2Test/JetstreamV2Test.csproj" />
     <Project Path="samples/RemoteResolution/RemoteResolution.csproj" />
     <Project Path="samples/XrpcServer/XrpcServer.csproj" />
     <Project Path="samples/MebiByteTest/MebiByteTest.csproj" />
