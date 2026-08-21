@@ -391,7 +391,51 @@ public sealed class FileOAuthSessionStore : IOAuthSessionStore
 
 ## Jetstream (Real-Time Events)
 
-Jetstream provides a lightweight, JSON-based WebSocket event stream. Requires the `CarpaNet.Jetstream` package.
+Jetstream provides a lightweight, JSON-based WebSocket event stream. Requires the `CarpaNet.Jetstream` package. The package has two clients: `JetstreamV2Client` (current service: managed live tail + sealed-archive replay; prefer for new code) and `JetstreamClient` (legacy v1 `/subscribe` wire).
+
+### Jetstream v2 (preferred)
+
+```csharp
+using CarpaNet.Jetstream;
+
+using var client = new JetstreamV2Client(
+    new Uri(BlueskyServices.JetstreamUsEast),
+    new JetstreamV2ClientOptions { EnableCompression = true }); // dict-zstd, dictionary auto-fetched
+
+var options = new JetstreamV2SubscribeOptions
+{
+    Collections = new[] { "app.bsky.feed.post", "app.bsky.graph.*" }, // exact NSIDs or wildcards
+    Dids = new[] { "did:plc:z72i7hdynmk6r22z27h6tvur" },             // optional, max 10,000
+    // LiveCursor = lastSeq,  // resume a live tail from a saved seq (evt.Seq)
+    // AfterSeq = 0,          // or: replay the whole sealed archive, then cut over to live
+    // SnapshotOnly = true,   // or: archive dump only, no websocket
+};
+
+await foreach (var evt in client.SubscribeAsync(options))
+{
+    switch (evt.Kind)
+    {
+        case JetstreamV2EventKind.Commit when evt.Commit is { } commit:
+            Console.WriteLine($"[{commit.Operation}] seq={evt.Seq} {commit.Collection}/{commit.Rkey}");
+            // Typed record via your generated context:
+            // var post = commit.GetRecord(ATProtoJsonContext.Default.AppBskyFeedPost);
+            break;
+        case JetstreamV2EventKind.Identity when evt.Identity is { } identity:
+            Console.WriteLine($"[Identity] {evt.Did} → {identity.Handle}");
+            break;
+        case JetstreamV2EventKind.Account when evt.Account is { } account:
+            Console.WriteLine($"[Account] {evt.Did} active={account.Active} status={account.Status}");
+            break;
+        case JetstreamV2EventKind.Sync when evt.Sync is { } sync:
+            Console.WriteLine($"[Sync] {evt.Did} rev={sync.Rev}");
+            break;
+    }
+}
+```
+
+The managed stream reconnects with backoff, resumes at the last delivered seq, dedups the at-least-once overlap, and recovers from `CursorTooOld` by re-entering archive replay (backfill mode) — persist `evt.Seq` to resume across restarts. Collection filters never suppress `#identity`/`#account`/`#sync` (the account-deletion purge signal); v2 filters are immutable per connection (no `options_update`). Archive endpoints (`PlanSnapshotAsync`/`GetSegmentAsync`/`GetBlockAsync` + `JetstreamSegmentFormat`) are public; `JetstreamV2ClientOptions.ApiKey` authenticates them.
+
+### Jetstream v1 (legacy)
 
 ```csharp
 using CarpaNet.Jetstream;
@@ -432,12 +476,15 @@ await foreach (var evt in client.SubscribeAsync(options))
 }
 ```
 
-### Dynamic Filter Updates
+### Dynamic Filter Updates (v1 only)
 
 ```csharp
 await client.SendOptionsUpdateAsync(new JetstreamOptionsUpdate
 {
-    WantedCollections = new[] { "app.bsky.graph.follow" },
+    Payload = new JetstreamOptionsPayload
+    {
+        WantedCollections = new List<string> { "app.bsky.graph.follow" },
+    },
 });
 ```
 

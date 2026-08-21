@@ -70,4 +70,9 @@ public static class BlueskyServices
     /// Bluesky Jetstream instance 2, US-West.
     /// </summary>
     public const string Jetstream2UsWest = "https://jetstream2.us-west.bsky.network";
+
+    /// <summary>
+    /// Bluesky Jetstream v2 service, US-East.
+    /// </summary>
+    public const string JetstreamUsEast = "https://jetstream.us-east.bsky.network";
 }
