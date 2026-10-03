@@ -86,6 +86,46 @@ To read or check scopes:
 
 The library does not expand `include:` scopes into the permissions of their lexicon permission set.
 
+## Hosting Client Metadata
+
+A production client ID is the https URL of a JSON client metadata document that you host. `OAuthClientMetadata` creates, validates and serializes this document.
+
+- `OAuthClientMetadata.CreatePublicClient(clientId, redirectUris, scope, applicationType)` creates a public client: `token_endpoint_auth_method` `none`, the `authorization_code` and `refresh_token` grants, the `code` response type and `dpop_bound_access_tokens: true`. The scope can be a string or a `ScopeSet`. `applicationType` is `OAuthApplicationType.Native` (the default) or `OAuthApplicationType.Web`.
+- After you create the document, set `ClientName`, `ClientUri`, `LogoUri`, `TosUri` and `PolicyUri` as necessary.
+- `Validate()` applies the atproto client metadata rules and throws `InvalidOAuthClientMetadataException` with the first broken rule. `TryValidate(out var error)` and `OAuthClientMetadataValidator.Check(metadata)` return the error instead. `OAuthClientMetadataValidator.CheckScope(scope)` checks a scope string only.
+- `ToJson()` writes the document. `OAuthClientMetadata.FromJson(json)` reads it. `OAuthClientMetadata.JsonTypeInfo` is the source-generated type info, so serialization is AOT and trim safe.
+
+Some of the rules:
+
+- The client ID path must not be `/` and must not end with `/`. The client ID host must be a domain name, not an IP address.
+- `client_uri` must have the same origin as the client ID and must be a parent URL of it.
+- A private-use scheme redirect URI must be the client ID host in reverse order, followed by `:/` (for example `com.example.app:/callback` for `app.example.com`). Only native clients can use private-use scheme and loopback (`http://127.0.0.1`, `http://[::1]`) redirect URIs.
+- The scope must contain `atproto`, must not contain a value two times, and each permission value must be well formed.
+
+This ASP.NET Core minimal API example serves a native client document:
+
+```csharp
+using CarpaNet.OAuth;
+using CarpaNet.OAuth.Scopes;
+
+var scope = new ScopeSet()
+    .AddAtproto()
+    .AddInclude("app.bsky.authFullApp", "did:web:api.bsky.app#bsky_appview")
+    .AddBlob("*/*");
+
+var metadata = OAuthClientMetadata.CreatePublicClient(
+    "https://app.example.com/client-metadata.json",
+    new[] { "com.example.app:/callback", "http://127.0.0.1/callback" },
+    scope);
+metadata.ClientName = "Example";
+metadata.ClientUri = "https://app.example.com/";
+metadata.Validate(); // throws InvalidOAuthClientMetadataException
+
+app.MapGet("/client-metadata.json", () => Results.Json(metadata, OAuthClientMetadata.JsonTypeInfo));
+```
+
+A loopback client ID (`http://localhost?...`) does not have a hosted document. The authorization server derives the document from the ID. `OAuthClientMetadata.CreateForLoopbackClientId(clientId)` returns that derived document.
+
 ## Callback Validation
 
 `CallbackAsync` validates the authorization response before it creates the session. When a check fails, it throws `OAuthCallbackException` (with `AppState` set) and does not store a session.

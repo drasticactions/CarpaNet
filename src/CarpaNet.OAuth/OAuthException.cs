@@ -123,3 +123,19 @@ public class DPoPNonceException : OAuthException
         NewNonce = newNonce;
     }
 }
+
+/// <summary>
+/// Exception thrown when OAuth client metadata breaks the atproto client metadata rules
+/// (see <see cref="OAuthClientMetadataValidator"/>). The message is the first broken rule.
+/// </summary>
+public sealed class InvalidOAuthClientMetadataException : Exception
+{
+    /// <summary>
+    /// Creates a new invalid client metadata exception.
+    /// </summary>
+    /// <param name="message">The broken rule.</param>
+    public InvalidOAuthClientMetadataException(string message)
+        : base(message)
+    {
+    }
+}
