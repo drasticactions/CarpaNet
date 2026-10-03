@@ -182,7 +182,7 @@ var (session, error) = await protocol.AuthenticateWithOAuth2CallbackResultAsync(
 // CarpaNet — OAuth is a separate OAuthSession class
 using var oauthSession = new OAuthSession(new OAuthClientConfig
 {
-    ClientId = OAuthClientConfig.CreateLoopbackClientId(8080),
+    ClientId = OAuthClientConfig.CreateLoopbackClientId(8080, "atproto transition:generic"),
     RedirectUri = OAuthClientConfig.CreateLoopbackRedirectUri(8080),
     Scope = "atproto transition:generic",
     JsonOptions = ATProtoJsonContext.DefaultOptions,

@@ -557,11 +557,19 @@ public sealed class JsonElementCborConverter : CborTypeConverter<System.Text.Jso
                 break;
 
             case System.Text.Json.JsonValueKind.Object:
-                var propCount = 0;
-                foreach (var _ in element.EnumerateObject()) propCount++;
+                // atproto JSON data model: {"$link": cid} is a CID link and {"$bytes": base64} is a byte string
+                if (TryWriteSpecialObject(ref writer, element))
+                {
+                    break;
+                }
 
-                writer.WriteStartMap(propCount);
-                foreach (var prop in element.EnumerateObject())
+                // DAG-CBOR requires map keys in canonical order (length first, then bytewise)
+                var props = new System.Collections.Generic.List<System.Text.Json.JsonProperty>();
+                foreach (var prop in element.EnumerateObject()) props.Add(prop);
+                props.Sort((a, b) => DagCborKeyComparer.Instance.Compare(a.Name, b.Name));
+
+                writer.WriteStartMap(props.Count);
+                foreach (var prop in props)
                 {
                     writer.WriteTextString(prop.Name);
                     WriteJsonToCbor(ref writer, prop.Value);
@@ -569,6 +577,50 @@ public sealed class JsonElementCborConverter : CborTypeConverter<System.Text.Jso
                 writer.WriteEndMap();
                 break;
         }
+    }
+
+    private static bool TryWriteSpecialObject(ref DagCborWriter writer, System.Text.Json.JsonElement element)
+    {
+        string? name = null;
+        System.Text.Json.JsonElement value = default;
+        foreach (var prop in element.EnumerateObject())
+        {
+            if (name != null)
+            {
+                return false;
+            }
+
+            name = prop.Name;
+            value = prop.Value;
+        }
+
+        if (value.ValueKind != System.Text.Json.JsonValueKind.String)
+        {
+            return false;
+        }
+
+        if (name == "$link")
+        {
+            writer.WriteCidLink(new ATCid(value.GetString()!));
+            return true;
+        }
+
+        if (name == "$bytes")
+        {
+            var base64 = value.GetString()!;
+            var padding = (4 - (base64.Length % 4)) % 4;
+            try
+            {
+                writer.WriteByteString(Convert.FromBase64String(base64 + new string('=', padding)));
+                return true;
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
+        }
+
+        return false;
     }
 
     private static string EscapeJsonString(string s)
@@ -694,27 +746,24 @@ public sealed class ATBlobCborConverter : CborTypeConverter<ATBlob>
 
         writer.WriteStartMap(propertyCount);
 
-        // Write $type
-        writer.WriteTextString("$type");
-        writer.WriteTextString("blob");
-
-        // Write ref
+        // Keys in DAG-CBOR canonical order (length first, then bytewise): ref, size, $type, mimeType
         if (value.Ref.Value != null)
         {
             writer.WriteTextString("ref");
             _cidConverter.WriteTyped(ref writer, value.Ref);
         }
 
-        // Write mimeType
+        writer.WriteTextString("size");
+        writer.WriteInt64(value.Size);
+
+        writer.WriteTextString("$type");
+        writer.WriteTextString("blob");
+
         if (value.MimeType != null)
         {
             writer.WriteTextString("mimeType");
             writer.WriteTextString(value.MimeType);
         }
-
-        // Write size
-        writer.WriteTextString("size");
-        writer.WriteInt64(value.Size);
 
         writer.WriteEndMap();
     }

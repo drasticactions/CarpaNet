@@ -149,13 +149,13 @@ public static class ApiGenerator
                 {
                     if (isRequired)
                     {
-                        sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", {propName}.ToString(\"o\")!));");
+                        sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", global::CarpaNet.ATDateTimeJsonConverter.Format({propName})));");
                     }
                     else
                     {
                         sb.AppendLine($"if ({propName} != null)");
                         sb.OpenBrace();
-                        sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", {propName}.Value.ToString(\"o\")!));");
+                        sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", global::CarpaNet.ATDateTimeJsonConverter.Format({propName}.Value)));");
                         sb.CloseBrace();
                     }
                 }

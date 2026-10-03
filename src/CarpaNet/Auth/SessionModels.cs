@@ -26,6 +26,13 @@ public sealed class CreateSessionRequest
     [JsonPropertyName("authFactorToken")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? AuthFactorToken { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether a takendown account may sign in (to see its status). Omitted when null.
+    /// </summary>
+    [JsonPropertyName("allowTakendown")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? AllowTakendown { get; set; }
 }
 
 /// <summary>

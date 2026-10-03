@@ -113,7 +113,10 @@ public sealed class ATProtoOAuthClient : IATProtoClient, IXrpcRequestClient, IDi
         _jsonOptions = jsonOptions ?? new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+#if NET9_0_OR_GREATER
+            AllowOutOfOrderMetadataProperties = true,
+#endif
         };
     }
 

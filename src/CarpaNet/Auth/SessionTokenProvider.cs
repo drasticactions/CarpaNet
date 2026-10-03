@@ -117,11 +117,30 @@ public sealed class SessionTokenProvider : ITokenProvider, INotifySessionInvalid
     /// <param name="authFactorToken">Optional 2FA token.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The session response.</returns>
-    public async Task<SessionResponse> LoginAsync(
+    public Task<SessionResponse> LoginAsync(
         string identifier,
         string password,
         Uri? serviceUrl = null,
         string? authFactorToken = null,
+        CancellationToken cancellationToken = default)
+        => LoginAsync(identifier, password, serviceUrl, authFactorToken, allowTakendown: false, cancellationToken);
+
+    /// <summary>
+    /// Creates a session by logging in with credentials.
+    /// </summary>
+    /// <param name="identifier">The user identifier (handle, email, or DID).</param>
+    /// <param name="password">The password or App Password.</param>
+    /// <param name="serviceUrl">The service URL to authenticate against (default: Bluesky Entryway).</param>
+    /// <param name="authFactorToken">Optional 2FA token.</param>
+    /// <param name="allowTakendown">When true, sends <c>allowTakendown</c> so a takendown account can sign in and see its status.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The session response.</returns>
+    public async Task<SessionResponse> LoginAsync(
+        string identifier,
+        string password,
+        Uri? serviceUrl,
+        string? authFactorToken,
+        bool allowTakendown,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -133,7 +152,8 @@ public sealed class SessionTokenProvider : ITokenProvider, INotifySessionInvalid
         {
             Identifier = identifier,
             Password = password,
-            AuthFactorToken = authFactorToken
+            AuthFactorToken = authFactorToken,
+            AllowTakendown = allowTakendown ? true : null,
         };
 
         var url = XrpcHttpHandler.BuildUrl(serviceUrl, "com.atproto.server.createSession");

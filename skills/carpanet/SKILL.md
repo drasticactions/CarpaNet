@@ -289,7 +289,7 @@ using CarpaNet.OAuth;
 var port = 8080;
 var config = new OAuthClientConfig
 {
-    ClientId = OAuthClientConfig.CreateLoopbackClientId(port),
+    ClientId = OAuthClientConfig.CreateLoopbackClientId(port, "atproto transition:generic"), // http://localhost?scope=...&redirect_uri=...
     RedirectUri = OAuthClientConfig.CreateLoopbackRedirectUri(port),
     Scope = "atproto transition:generic",
     JsonOptions = ATProtoJsonContext.DefaultOptions,
@@ -856,7 +856,7 @@ var (session, error) = await protocol.AuthenticateWithOAuth2CallbackResultAsync(
 // CarpaNet — OAuth is a separate OAuthSession class
 using var oauthSession = new OAuthSession(new OAuthClientConfig
 {
-    ClientId = OAuthClientConfig.CreateLoopbackClientId(8080),
+    ClientId = OAuthClientConfig.CreateLoopbackClientId(8080, "atproto transition:generic"),
     RedirectUri = OAuthClientConfig.CreateLoopbackRedirectUri(8080),
     Scope = "atproto transition:generic",
     JsonOptions = ATProtoJsonContext.DefaultOptions,

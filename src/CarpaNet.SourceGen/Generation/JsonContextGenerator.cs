@@ -706,7 +706,6 @@ public static class JsonContextGenerator
         ["bool"] = "BooleanConverter",
         ["int"] = "Int32Converter",
         ["byte[]"] = "ByteArrayConverter",
-        ["System.DateTimeOffset"] = "DateTimeOffsetConverter",
         ["System.Text.Json.JsonElement"] = "JsonElementConverter",
     };
 
@@ -719,6 +718,9 @@ public static class JsonContextGenerator
         ["CarpaNet.ATIdentifier"] = "CarpaNet.ATIdentifierJsonConverter",
         ["CarpaNet.ATCid"] = "CarpaNet.ATCidJsonConverter",
         ["CarpaNet.ATBlob"] = "CarpaNet.ATBlobJsonConverter",
+
+        // atproto datetimes are written as YYYY-MM-DDTHH:mm:ss.sssZ, not the round-trip "O" format
+        ["System.DateTimeOffset"] = "CarpaNet.ATDateTimeJsonConverter",
     };
 
     /// <summary>

@@ -184,16 +184,22 @@ public abstract class CborObjectTypeInfo<T> : CborTypeInfo<T> where T : class
 
         writer.WriteStartMap(propertyCount);
 
-        // Write $type if present
-        if (TypeDiscriminator != null)
+        // Write $type and properties in DAG-CBOR canonical key order
+        var properties = Properties;
+        foreach (var index in GetWriteOrder(properties))
         {
-            writer.WriteTextString("$type");
-            writer.WriteTextString(TypeDiscriminator);
-        }
+            if (index == TypeDiscriminatorIndex)
+            {
+                if (TypeDiscriminator != null)
+                {
+                    writer.WriteTextString("$type");
+                    writer.WriteTextString(TypeDiscriminator);
+                }
 
-        // Write properties
-        foreach (var prop in Properties)
-        {
+                continue;
+            }
+
+            var prop = properties[index];
             if (prop.ShouldSerialize(value))
             {
                 writer.WriteTextString(prop.Name);
@@ -202,6 +208,66 @@ public abstract class CborObjectTypeInfo<T> : CborTypeInfo<T> where T : class
         }
 
         writer.WriteEndMap();
+    }
+
+    /// <summary>
+    /// Marks the position of the <c>$type</c> entry in <see cref="GetWriteOrder"/>.
+    /// </summary>
+    private const int TypeDiscriminatorIndex = -1;
+
+    private WriteOrderCache? _writeOrder;
+
+    /// <summary>
+    /// Returns the property indexes (and <see cref="TypeDiscriminatorIndex"/> for <c>$type</c>) sorted
+    /// in DAG-CBOR canonical key order. The order is fixed per property list, so it is computed once;
+    /// properties that are not written are skipped at write time, which keeps any subset canonical.
+    /// </summary>
+    private int[] GetWriteOrder(IReadOnlyList<CborPropertyInfo<T>> properties)
+    {
+        var cached = _writeOrder;
+        if (cached != null && ReferenceEquals(cached.Source, properties))
+        {
+            return cached.Order;
+        }
+
+        var keys = new List<KeyValuePair<string, int>>(properties.Count + 1)
+        {
+            new("$type", TypeDiscriminatorIndex),
+        };
+
+        for (var i = 0; i < properties.Count; i++)
+        {
+            keys.Add(new KeyValuePair<string, int>(properties[i].Name, i));
+        }
+
+        // Stable sort: List.Sort is not stable, so break ties by original position
+        keys.Sort((a, b) =>
+        {
+            var result = DagCborKeyComparer.Instance.Compare(a.Key, b.Key);
+            return result != 0 ? result : a.Value.CompareTo(b.Value);
+        });
+
+        var order = new int[keys.Count];
+        for (var i = 0; i < keys.Count; i++)
+        {
+            order[i] = keys[i].Value;
+        }
+
+        _writeOrder = new WriteOrderCache(properties, order);
+        return order;
+    }
+
+    private sealed class WriteOrderCache
+    {
+        public WriteOrderCache(IReadOnlyList<CborPropertyInfo<T>> source, int[] order)
+        {
+            Source = source;
+            Order = order;
+        }
+
+        public IReadOnlyList<CborPropertyInfo<T>> Source { get; }
+
+        public int[] Order { get; }
     }
 }
 

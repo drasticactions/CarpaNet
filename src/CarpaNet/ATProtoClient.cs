@@ -92,16 +92,36 @@ public sealed class ATProtoClient : IATProtoClient, IXrpcRequestClient, IDisposa
     /// <param name="authFactorToken">Optional 2FA token.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The session response with user info.</returns>
-    public async Task<SessionResponse> LoginAsync(
+    public Task<SessionResponse> LoginAsync(
         string identifier,
         string password,
         Uri? serviceUrl = null,
         string? authFactorToken = null,
         CancellationToken cancellationToken = default)
+        => LoginAsync(identifier, password, serviceUrl, authFactorToken, allowTakendown: false, cancellationToken);
+
+    /// <summary>
+    /// Authenticates with the ATProtocol service using credentials.
+    /// Only works when the client was created with a <see cref="SessionTokenProvider"/>.
+    /// </summary>
+    /// <param name="identifier">The user identifier (handle, email, or DID).</param>
+    /// <param name="password">The password or App Password.</param>
+    /// <param name="serviceUrl">The service URL (default: Bluesky Entryway).</param>
+    /// <param name="authFactorToken">Optional 2FA token.</param>
+    /// <param name="allowTakendown">When true, a takendown account can sign in and see its status.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The session response with user info.</returns>
+    public async Task<SessionResponse> LoginAsync(
+        string identifier,
+        string password,
+        Uri? serviceUrl,
+        string? authFactorToken,
+        bool allowTakendown,
+        CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         var sessionProvider = GetSessionTokenProvider();
-        var response = await sessionProvider.LoginAsync(identifier, password, serviceUrl, authFactorToken, cancellationToken).ConfigureAwait(false);
+        var response = await sessionProvider.LoginAsync(identifier, password, serviceUrl, authFactorToken, allowTakendown, cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Logged in as {Did}", response.Did);
         return response;
     }

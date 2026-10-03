@@ -268,6 +268,13 @@ public static class XrpcHttpHandler
             return default!;
         }
 
+        // Procedures without an output are generated as Task<object>. Servers answer them with an
+        // empty 200 (or an arbitrary body), and object has no JSON type info, so skip the body.
+        if (typeof(TOutput) == typeof(object))
+        {
+            return (TOutput)new object();
+        }
+
         // Deserialize successful response
 #if NET8_0_OR_GREATER
         var content = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);

@@ -195,7 +195,7 @@ public sealed class ByteArrayCborConverter : CborTypeConverter<byte[]>
 
 /// <summary>
 /// CBOR converter for DateTimeOffset values.
-/// Writes as ISO 8601 string for maximum compatibility.
+/// Writes the atproto datetime form (YYYY-MM-DDTHH:mm:ss.sssZ, UTC, millisecond precision).
 /// </summary>
 public sealed class DateTimeOffsetCborConverter : CborTypeConverter<DateTimeOffset>
 {
@@ -213,7 +213,7 @@ public sealed class DateTimeOffsetCborConverter : CborTypeConverter<DateTimeOffs
             if (tag == CborTag.DateTimeString)
             {
                 var dateString = reader.ReadTextString();
-                return DateTimeOffset.Parse(dateString);
+                return ParseDateString(dateString);
             }
 
             // Tag 1: Epoch-based date/time
@@ -239,7 +239,7 @@ public sealed class DateTimeOffsetCborConverter : CborTypeConverter<DateTimeOffs
         if (state == CborReaderState.TextString)
         {
             var dateString = reader.ReadTextString();
-            return DateTimeOffset.Parse(dateString);
+            return ParseDateString(dateString);
         }
 
         if (state == CborReaderState.UnsignedInteger || state == CborReaderState.NegativeInteger)
@@ -257,11 +257,21 @@ public sealed class DateTimeOffsetCborConverter : CborTypeConverter<DateTimeOffs
         throw new InvalidOperationException($"Cannot read DateTimeOffset from CBOR state: {state}");
     }
 
+    private static DateTimeOffset ParseDateString(string dateString)
+    {
+        if (ATDateTimeJsonConverter.TryParse(dateString, out var result))
+        {
+            return result;
+        }
+
+        throw new FormatException($"Invalid datetime value: '{dateString}'.");
+    }
+
     /// <inheritdoc/>
     public override void WriteTyped(ref DagCborWriter writer, DateTimeOffset value)
     {
-        // Write as ISO 8601 string for maximum compatibility
-        writer.WriteTextString(value.ToString("O"));
+        // atproto datetime form: YYYY-MM-DDTHH:mm:ss.sssZ (UTC, millisecond precision)
+        writer.WriteTextString(ATDateTimeJsonConverter.Format(value));
     }
 }
 

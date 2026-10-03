@@ -11,7 +11,7 @@ using CarpaNet.OAuth;
 var port = 8080;
 var config = new OAuthClientConfig
 {
-    ClientId = OAuthClientConfig.CreateLoopbackClientId(port),
+    ClientId = OAuthClientConfig.CreateLoopbackClientId(port, "atproto transition:generic"), // http://localhost?scope=...&redirect_uri=...
     RedirectUri = OAuthClientConfig.CreateLoopbackRedirectUri(port),
     Scope = "atproto transition:generic",
     JsonOptions = ATProtoJsonContext.DefaultOptions,

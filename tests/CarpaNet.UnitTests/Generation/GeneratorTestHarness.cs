@@ -66,7 +66,8 @@ internal static class GeneratorTestHarness
         var driver = CSharpGeneratorDriver.Create(
             new[] { new LexiconGenerator().AsSourceGenerator() },
             additionalTexts,
-            new CSharpParseOptions(LanguageVersion.Latest),
+            // Same target-framework symbols a net10.0 consumer build defines, so #if blocks in generated code take the real path.
+            new CSharpParseOptions(LanguageVersion.Latest, preprocessorSymbols: new[] { "NET", "NETCOREAPP", "NET10_0", "NET10_0_OR_GREATER", "NET9_0_OR_GREATER", "NET8_0_OR_GREATER" }),
             optionsProvider);
 
         driver = (CSharpGeneratorDriver)driver.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out var diagnostics);

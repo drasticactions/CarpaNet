@@ -16,7 +16,7 @@ public sealed class OAuthClientConfig
 {
     /// <summary>
     /// The client ID. For web apps, this is the URL where client metadata is hosted.
-    /// For loopback clients, use <see cref="CreateLoopbackClientId"/>.
+    /// For loopback clients, use <see cref="CreateLoopbackClientId(int, string)"/> or <see cref="CreateLoopback"/>.
     /// </summary>
     public string ClientId { get; set; } = string.Empty;
 
@@ -110,15 +110,56 @@ public sealed class OAuthClientConfig
     public IdentityResolver? IdentityResolver { get; set; }
 
     /// <summary>
-    /// Creates a loopback client ID for native/desktop applications.
+    /// Creates an atproto loopback client ID for a native/desktop application listening on
+    /// <see cref="CreateLoopbackRedirectUri"/>: <c>http://localhost?redirect_uri=http%3A%2F%2F127.0.0.1%3A{port}%2Fcallback</c>.
+    /// The client may only request the default <c>atproto</c> scope; use
+    /// <see cref="CreateLoopbackClientId(int, string)"/> or <see cref="AtprotoLoopbackClientId.Build"/> for other scopes.
     /// </summary>
     /// <param name="port">The local port for the callback server.</param>
-    /// <param name="state">Optional state parameter.</param>
     /// <returns>A loopback client ID.</returns>
-    public static string CreateLoopbackClientId(int port, string? state = null)
+    public static string CreateLoopbackClientId(int port)
     {
-        var stateParam = string.IsNullOrEmpty(state) ? "" : $"&state={Uri.EscapeDataString(state)}";
-        return $"http://127.0.0.1:{port}/?{stateParam}";
+        return CreateLoopbackClientId(port, scope: null);
+    }
+
+    /// <summary>
+    /// Creates an atproto loopback client ID for a native/desktop application listening on
+    /// <see cref="CreateLoopbackRedirectUri"/>. The client ID is <c>http://localhost</c> with the
+    /// <c>redirect_uri</c> query parameter and, when it is not <c>atproto</c>, the <c>scope</c> parameter.
+    /// The authorization server only lets the client request scopes listed in its client ID, so
+    /// <paramref name="scope"/> should match <see cref="Scope"/>.
+    /// </summary>
+    /// <param name="port">The local port for the callback server.</param>
+    /// <param name="scope">The scope the client will request, or null for <c>atproto</c>. Must contain <c>atproto</c>.</param>
+    /// <returns>A loopback client ID.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The port is not between 1 and 65535.</exception>
+    /// <exception cref="ArgumentException">The scope is invalid or does not contain <c>atproto</c>.</exception>
+    public static string CreateLoopbackClientId(int port, string? scope)
+    {
+        if (port < 1 || port > 65535)
+        {
+            throw new ArgumentOutOfRangeException(nameof(port), port, "Port must be between 1 and 65535.");
+        }
+
+        return AtprotoLoopbackClientId.Build(scope, new[] { CreateLoopbackRedirectUri(port) });
+    }
+
+    /// <summary>
+    /// Creates a configuration for a native/desktop application using an atproto loopback client ID:
+    /// sets <see cref="ClientId"/>, <see cref="RedirectUri"/> (<c>http://127.0.0.1:{port}/callback</c>)
+    /// and <see cref="Scope"/> consistently.
+    /// </summary>
+    /// <param name="port">The local port for the callback server.</param>
+    /// <param name="scope">The scope to request (default <c>atproto</c>). Must contain <c>atproto</c>.</param>
+    /// <returns>A new configuration.</returns>
+    public static OAuthClientConfig CreateLoopback(int port, string scope = AtprotoLoopbackClientId.DefaultScope)
+    {
+        return new OAuthClientConfig
+        {
+            ClientId = CreateLoopbackClientId(port, scope),
+            RedirectUri = CreateLoopbackRedirectUri(port),
+            Scope = scope,
+        };
     }
 
     /// <summary>

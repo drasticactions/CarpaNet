@@ -815,6 +815,11 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         sb.OpenBrace();
         sb.AppendLine("PropertyNamingPolicy = global::System.Text.Json.JsonNamingPolicy.CamelCase,");
         sb.AppendLine("DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,");
+        // Servers may write a union's "$type" after other properties (the reference PDS puts it last in
+        // com.atproto.repo.applyWrites results); closed unions are [JsonPolymorphic], so allow that.
+        sb.AppendLine("#if NET9_0_OR_GREATER");
+        sb.AppendLine("AllowOutOfOrderMetadataProperties = true,");
+        sb.AppendLine("#endif");
         sb.AppendLine($"TypeInfoResolver = Default,");
         sb.CloseBrace(withSemicolon: true);
         sb.AppendLine();

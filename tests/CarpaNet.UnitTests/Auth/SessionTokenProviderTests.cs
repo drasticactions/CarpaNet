@@ -179,6 +179,40 @@ public class SessionTokenProviderTests
         Assert.Equal("did:plc:test", provider.CurrentDid);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LoginAsync_AllowTakendown_SentOnlyWhenRequested(bool allowTakendown)
+    {
+        string? body = null;
+        var handler = new MockHttpMessageHandler(async (request, ct) =>
+        {
+            body = await request.Content!.ReadAsStringAsync(ct);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    $@"{{""accessJwt"": ""{SampleJwt}"", ""refreshJwt"": ""refresh-token"", ""did"": ""did:plc:test"", ""handle"": ""alice.bsky.social""}}",
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+
+        using var httpClient = new HttpClient(handler);
+        using var provider = new SessionTokenProvider(httpClient);
+
+        await provider.LoginAsync("alice.bsky.social", "app-password", null, null, allowTakendown);
+
+        Assert.NotNull(body);
+        if (allowTakendown)
+        {
+            Assert.Contains("\"allowTakendown\":true", body);
+        }
+        else
+        {
+            Assert.DoesNotContain("allowTakendown", body);
+        }
+    }
+
     [Fact]
     public async Task LoginAsync_WithAuthError_ThrowsAuthenticationException()
     {

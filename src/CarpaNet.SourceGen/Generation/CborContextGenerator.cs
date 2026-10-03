@@ -408,7 +408,7 @@ public static class CborContextGenerator
         sb.AppendLine();
 
         // WriteWithTypeDiscriminator
-        sb.WriteSummary("Writes an object through its type info, adding a leading $type entry to the map.");
+        sb.WriteSummary("Writes an object through its type info, adding a $type entry to the map in DAG-CBOR canonical key order.");
         sb.AppendLine("public static void WriteWithTypeDiscriminator(ref CarpaNet.Cbor.DagCborWriter writer, string discriminator, CarpaNet.Cbor.ICborTypeInfo typeInfo, object value)");
         sb.OpenBrace();
         sb.AppendLine("var temp = new CarpaNet.Cbor.DagCborWriter();");
@@ -422,13 +422,29 @@ public static class CborContextGenerator
         sb.AppendLine();
         sb.AppendLine("var count = reader.ReadStartMap();");
         sb.AppendLine("writer.WriteStartMap(count + 1);");
-        sb.AppendLine("writer.WriteTextString(\"$type\");");
-        sb.AppendLine("writer.WriteTextString(discriminator);");
+        sb.AppendLine();
+        sb.AppendLine("// The member's keys are already in DAG-CBOR canonical order; insert $type at its canonical position");
+        sb.AppendLine("var typeWritten = false;");
         sb.AppendLine("while (reader.PeekState() != System.Formats.Cbor.CborReaderState.EndMap)");
         sb.OpenBrace();
-        sb.AppendLine("CopyValue(ref reader, ref writer); // key");
+        sb.AppendLine("var key = reader.ReadTextString();");
+        sb.AppendLine("if (!typeWritten && CarpaNet.Cbor.DagCborKeyComparer.Instance.Compare(\"$type\", key) < 0)");
+        sb.OpenBrace();
+        sb.AppendLine("writer.WriteTextString(\"$type\");");
+        sb.AppendLine("writer.WriteTextString(discriminator);");
+        sb.AppendLine("typeWritten = true;");
+        sb.CloseBrace();
+        sb.AppendLine();
+        sb.AppendLine("writer.WriteTextString(key);");
         sb.AppendLine("CopyValue(ref reader, ref writer); // value");
         sb.CloseBrace();
+        sb.AppendLine();
+        sb.AppendLine("if (!typeWritten)");
+        sb.OpenBrace();
+        sb.AppendLine("writer.WriteTextString(\"$type\");");
+        sb.AppendLine("writer.WriteTextString(discriminator);");
+        sb.CloseBrace();
+        sb.AppendLine();
         sb.AppendLine("reader.ReadEndMap();");
         sb.AppendLine("writer.WriteEndMap();");
         sb.CloseBrace();
