@@ -240,6 +240,12 @@ public static class JsonContextGenerator
 
             foreach (var refString in refs)
             {
+                // A member whose definition is missing is left out; an open union keeps it as an unknown member.
+                if (!registry.IsResolvable(refString, currentNsid))
+                {
+                    continue;
+                }
+
                 var typeName = registry.ResolveToCSharpType(refString, currentNsid);
                 var discriminator = GetTypeDiscriminator(refString, currentNsid, registry);
                 sb.AppendLine($"polyOptions.DerivedTypes.Add(new global::System.Text.Json.Serialization.Metadata.JsonDerivedType(typeof(global::{typeName}), \"{discriminator}\"));");
@@ -289,6 +295,12 @@ public static class JsonContextGenerator
         var seenDiscriminators = new HashSet<string>();
         foreach (var refString in refs)
         {
+            // A member whose definition is missing is left out; an open union keeps it as an unknown member.
+            if (!registry.IsResolvable(refString, currentNsid))
+            {
+                continue;
+            }
+
             var typeName = registry.ResolveToCSharpType(refString, currentNsid);
             var discriminator = GetTypeDiscriminator(refString, currentNsid, registry);
             if (seenDiscriminators.Add(discriminator))

@@ -38,6 +38,12 @@ public static class UnionGenerator
 
             foreach (var refString in refs)
             {
+                // A member whose definition is missing is left out; an open union keeps it as an unknown member.
+                if (!registry.IsResolvable(refString, currentNsid))
+                {
+                    continue;
+                }
+
                 var typeName = registry.ResolveToCSharpType(refString, currentNsid);
                 var discriminator = GetTypeDiscriminator(refString, currentNsid);
                 sb.WriteAttribute($"System.Text.Json.Serialization.JsonDerivedType(typeof({typeName}), \"{discriminator}\")");

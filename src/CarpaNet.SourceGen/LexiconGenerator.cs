@@ -282,7 +282,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                     new DiagnosticDescriptor(
                         "ATPG002",
                         "Unresolved Lexicon Reference",
-                        "Lexicon '{0}' is referenced but not included in the project. Unresolved references: {1}. Add the corresponding lexicon JSON file to resolve this.",
+                        "Lexicon '{0}' is referenced but not included in the project. Unresolved references: {1}. Values of these references are kept as raw JSON (JsonElement), and union members that name them are treated as unknown members. Add the corresponding lexicon JSON file to generate types for them.",
                         "CarpaNet",
                         DiagnosticSeverity.Warning,
                         isEnabledByDefault: true),

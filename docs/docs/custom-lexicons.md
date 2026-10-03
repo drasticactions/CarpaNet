@@ -28,3 +28,16 @@ foreach (var record in records.Records)
     Console.WriteLine(parsed?.SomeField);
 }
 ```
+
+## Missing definitions
+
+A lexicon can reference a definition that is not loaded, for example a published schema that
+names a definition its authority never published. CarpaNet reports warning `ATPG002` and still
+generates compilable code:
+
+- A property, array item or query output that references the missing definition is typed as
+  `System.Text.Json.JsonElement` and round-trips as raw JSON (and CBOR).
+- A union member that references it is left out of the union. In an open union, a value with
+  that `$type` becomes an `Unknown_*` member; in a closed union it is rejected.
+
+Add the lexicon JSON file that defines it to get a typed property instead.

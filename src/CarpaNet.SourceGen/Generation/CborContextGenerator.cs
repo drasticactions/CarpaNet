@@ -239,6 +239,12 @@ public static class CborContextGenerator
 
         foreach (var refString in refs)
         {
+            // A member whose definition is missing is left out; an open union keeps it as an unknown member.
+            if (!registry.IsResolvable(refString, currentNsid))
+            {
+                continue;
+            }
+
             var typeName = registry.ResolveToCSharpType(refString, currentNsid);
             typeName = QualifyUnionNames(typeName, refString, currentNsid, registry);
             var discriminator = GetTypeDiscriminator(refString, currentNsid, registry);
@@ -972,6 +978,8 @@ public static class CborContextGenerator
             LexiconTypeKind.CidLink => "new CarpaNet.Cbor.Converters.ATCidCborConverter()",
             LexiconTypeKind.Blob => "new CarpaNet.Cbor.Converters.ATBlobCborConverter()",
             LexiconTypeKind.Token => "new CarpaNet.Cbor.Converters.StringCborConverter()",
+            // "unknown" definitions and dangling references are raw JSON.
+            LexiconTypeKind.Any => "new CarpaNet.Cbor.Converters.JsonElementCborConverter()",
             _ => "new CarpaNet.Cbor.Converters.StringCborConverter()"
         };
     }
