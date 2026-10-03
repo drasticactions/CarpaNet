@@ -209,6 +209,43 @@ public static class XrpcHttpHandler
     }
 
     /// <summary>
+    /// Adds caller-supplied headers to a request. A header that already exists on the request is replaced.
+    /// </summary>
+    /// <param name="request">The request.</param>
+    /// <param name="headers">The headers to add, or null.</param>
+    public static void AddCustomHeaders(HttpRequestMessage request, IReadOnlyDictionary<string, string>? headers)
+    {
+        if (headers == null)
+        {
+            return;
+        }
+
+        foreach (var header in headers)
+        {
+            request.Headers.Remove(header.Key);
+            request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+    }
+
+    /// <summary>
+    /// Returns whether two URLs have the same scheme, host and port.
+    /// Used to decide whether session credentials may be sent with a request.
+    /// </summary>
+    /// <param name="url">The request URL.</param>
+    /// <param name="origin">The URL of the server that issued the credentials.</param>
+    public static bool IsSameOrigin(Uri url, Uri origin)
+    {
+        if (url == null)
+            throw new ArgumentNullException(nameof(url));
+        if (origin == null)
+            throw new ArgumentNullException(nameof(origin));
+
+        return string.Equals(url.Scheme, origin.Scheme, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(url.IdnHost, origin.IdnHost, StringComparison.OrdinalIgnoreCase)
+            && url.Port == origin.Port;
+    }
+
+    /// <summary>
     /// Processes an HTTP response and deserializes the result.
     /// Throws appropriate exceptions for error responses.
     /// </summary>

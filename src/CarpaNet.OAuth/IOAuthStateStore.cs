@@ -41,6 +41,13 @@ public sealed class OAuthStateData
     public string? PdsUrl { get; set; }
 
     /// <summary>
+    /// The DID of the account the flow was started for, when authorization was started from a
+    /// handle or DID. The token response's <c>sub</c> must match it. Null when authorization
+    /// was started from a PDS or entryway URL, in which case any account may sign in.
+    /// </summary>
+    public string? ExpectedSub { get; set; }
+
+    /// <summary>
     /// When this state expires.
     /// </summary>
     public DateTimeOffset ExpiresAt { get; set; }

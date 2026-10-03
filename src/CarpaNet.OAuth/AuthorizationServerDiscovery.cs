@@ -152,7 +152,28 @@ public sealed class AuthorizationServerDiscovery : IDisposable
         ThrowIfDisposed();
 
         _logger.LogDebug("Discovering authorization server for {ResourceUrl}", resourceUrl);
+        var metadata = await GetProtectedResourceMetadataAsync(resourceUrl, cancellationToken).ConfigureAwait(false);
+
+        // Use the first authorization server
+        return metadata.AuthorizationServers![0]
+            ?? throw new OAuthException("invalid_authorization_server", "Authorization server URL is null.");
+    }
+
+    /// <summary>
+    /// Fetches OAuth protected resource metadata (RFC 9728) from a PDS. This is not cached,
+    /// since it is used to verify which authorization server currently protects a resource.
+    /// </summary>
+    /// <param name="resourceUrl">The PDS URL.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The protected resource metadata. <see cref="OAuthProtectedResourceMetadata.AuthorizationServers"/> is guaranteed to be non-empty.</returns>
+    public async Task<OAuthProtectedResourceMetadata> GetProtectedResourceMetadataAsync(
+        string resourceUrl,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+
         var wellKnownUrl = GetProtectedResourceWellKnownUrl(resourceUrl);
+        _logger.LogDebug("Fetching protected resource metadata from {Url}", wellKnownUrl);
         var response = await _httpClient.GetAsync(wellKnownUrl, cancellationToken).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
@@ -163,19 +184,28 @@ public sealed class AuthorizationServerDiscovery : IDisposable
         }
 
         var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-        using var doc = JsonDocument.Parse(content);
 
-        if (!doc.RootElement.TryGetProperty("authorization_servers", out var servers) ||
-            servers.GetArrayLength() == 0)
+        OAuthProtectedResourceMetadata? metadata;
+        try
+        {
+            metadata = JsonSerializer.Deserialize(content, OAuthJsonContext.Default.OAuthProtectedResourceMetadata);
+        }
+        catch (JsonException ex)
+        {
+            throw new OAuthException(
+                "resource_metadata_parse_failed",
+                $"Failed to parse protected resource metadata from {wellKnownUrl}.",
+                ex);
+        }
+
+        if (metadata?.AuthorizationServers == null || metadata.AuthorizationServers.Length == 0)
         {
             throw new OAuthException(
                 "no_authorization_server",
                 "Protected resource does not specify any authorization servers.");
         }
 
-        // Use the first authorization server
-        return servers[0].GetString()
-            ?? throw new OAuthException("invalid_authorization_server", "Authorization server URL is null.");
+        return metadata;
     }
 
     /// <summary>

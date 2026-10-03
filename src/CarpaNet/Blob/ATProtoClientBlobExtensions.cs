@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -15,11 +16,21 @@ namespace CarpaNet.Blob;
 /// </summary>
 public static class ATProtoClientBlobExtensions
 {
+    private const string UploadBlobNsid = "com.atproto.repo.uploadBlob";
+    private const string GetBlobNsid = "com.atproto.sync.getBlob";
+
     /// <summary>
     /// Uploads a blob to the user's PDS.
     /// </summary>
+    /// <remarks>
+    /// With a client that implements <see cref="IXrpcRequestClient"/> (including OAuth clients), the
+    /// upload goes through the client's own authentication (Bearer or DPoP) and streams the content
+    /// without buffering it. A seekable stream can be replayed after a token refresh. To report
+    /// progress, wrap the stream in a <see cref="CarpaNet.Http.ProgressReportingStream"/>.
+    /// Use <see cref="BlobRef.ToATBlob"/> to put the result in a generated record.
+    /// </remarks>
     /// <param name="client">The ATProto client.</param>
-    /// <param name="content">The blob content stream.</param>
+    /// <param name="content">The blob content stream. It is read from its current position and not disposed.</param>
     /// <param name="mimeType">The MIME type of the blob.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A reference to the uploaded blob.</returns>
@@ -33,6 +44,17 @@ public static class ATProtoClientBlobExtensions
         if (!client.IsAuthenticated)
         {
             throw new InvalidOperationException("Blob upload requires authentication.");
+        }
+
+        if (client is IXrpcRequestClient xrpc)
+        {
+            var request = new XrpcRequest(HttpMethod.Post, UploadBlobNsid)
+            {
+                Body = XrpcBody.FromStream(content, mimeType),
+            };
+
+            using var response = await xrpc.SendXrpcAsync(request, cancellationToken).ConfigureAwait(false);
+            return await ReadUploadResponseAsync(response, cancellationToken).ConfigureAwait(false);
         }
 
         // Get the token provider to access the access token
@@ -91,6 +113,12 @@ public static class ATProtoClientBlobExtensions
     /// <summary>
     /// Downloads a blob from a PDS.
     /// </summary>
+    /// <remarks>
+    /// With a client that implements <see cref="IXrpcRequestClient"/>, a blob owned by another
+    /// account is fetched from that account's PDS (found with the client's
+    /// <see cref="IATProtoClient.IdentityResolver"/>) without session credentials; the user's own
+    /// blobs are fetched from their PDS with the client's authentication.
+    /// </remarks>
     /// <param name="client">The ATProto client.</param>
     /// <param name="did">The DID of the repo that owns the blob.</param>
     /// <param name="cid">The CID of the blob to download.</param>
@@ -102,6 +130,28 @@ public static class ATProtoClientBlobExtensions
         ATCid cid,
         CancellationToken cancellationToken = default)
     {
+        if (client is IXrpcRequestClient xrpc)
+        {
+            XrpcRequestOptions? options = null;
+            var owner = did.ToString();
+            if (!string.Equals(owner, client.AuthenticatedDid, StringComparison.Ordinal) && client.IdentityResolver != null)
+            {
+                var didDoc = await client.IdentityResolver.ResolveAsync(owner, cancellationToken).ConfigureAwait(false);
+                if (didDoc.PdsEndpoint != null)
+                {
+                    options = new XrpcRequestOptions { ServiceUrl = new Uri(didDoc.PdsEndpoint) };
+                }
+            }
+
+            var parameters = new[]
+            {
+                new KeyValuePair<string, string>("did", owner),
+                new KeyValuePair<string, string>("cid", cid.ToString()),
+            };
+
+            return await xrpc.QueryBytesAsync(GetBlobNsid, parameters, options, cancellationToken).ConfigureAwait(false);
+        }
+
         var url = new Uri(client.BaseUrl, $"/xrpc/com.atproto.sync.getBlob?did={did}&cid={cid}");
 
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -164,8 +214,12 @@ public static class ATProtoClientBlobExtensions
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         }
 
-        var response = await client.HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        using var response = await client.HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        return await ReadUploadResponseAsync(response, cancellationToken).ConfigureAwait(false);
+    }
 
+    private static async Task<BlobRef> ReadUploadResponseAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);

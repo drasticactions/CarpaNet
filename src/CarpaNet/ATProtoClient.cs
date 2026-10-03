@@ -21,7 +21,7 @@ namespace CarpaNet;
 /// <summary>
 /// Default Implementation of <see cref="IATProtoClient"/>.
 /// </summary>
-public sealed class ATProtoClient : IATProtoClient, IDisposable
+public sealed class ATProtoClient : IATProtoClient, IXrpcRequestClient, IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -32,6 +32,8 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     private readonly Uri? _configuredBaseUrl;
     private readonly ILogger<ATProtoClient> _logger;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly string? _userAgent;
+    private IReadOnlyList<string>? _labelerDids;
     private bool _disposed;
 
     /// <inheritdoc/>
@@ -47,9 +49,23 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     public IdentityResolver? IdentityResolver { get; }
 
     /// <summary>
-    /// Gets the optional list of labeler DIDs to accept labels from.
+    /// Gets the labeler DIDs sent in the <c>atproto-accept-labelers</c> header.
+    /// Change it with <see cref="SetLabelerDids(IEnumerable{string}?)"/>.
     /// </summary>
-    public IReadOnlyList<string>? LabelerDids { get; }
+    public IReadOnlyList<string>? LabelerDids => Volatile.Read(ref _labelerDids);
+
+    /// <inheritdoc/>
+    public JsonSerializerOptions JsonOptions => _jsonOptions;
+
+    /// <summary>
+    /// Replaces the labeler DIDs sent in the <c>atproto-accept-labelers</c> header on later requests.
+    /// Entries may carry parameters such as <c>;redact</c> (see <see cref="AcceptLabelersHeader.Redact(string)"/>).
+    /// </summary>
+    /// <param name="labelerDids">The labeler DIDs, or null to send no header.</param>
+    public void SetLabelerDids(IEnumerable<string>? labelerDids)
+    {
+        Volatile.Write(ref _labelerDids, labelerDids?.ToArray());
+    }
 
     /// <summary>
     /// Gets the token provider, if any.
@@ -193,13 +209,8 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         options = options?.Clone() ?? new ATProtoClientOptions();
 
         // Create HttpClient if not provided
-        var httpClient = options.HttpClient ?? new HttpClient();
+        var httpClient = options.HttpClient ?? CreateOwnedHttpClient(options);
         var ownsHttpClient = options.HttpClient == null;
-
-        if (options.Timeout.HasValue)
-        {
-            httpClient.Timeout = options.Timeout.Value;
-        }
 
         // Create session token provider and login
         var tokenProvider = new SessionTokenProvider(httpClient, sessionStore: options.SessionStore, loggerFactory: options.LoggerFactory);
@@ -247,13 +258,8 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     {
         options = options?.Clone() ?? new ATProtoClientOptions();
 
-        var httpClient = options.HttpClient ?? new HttpClient();
+        var httpClient = options.HttpClient ?? CreateOwnedHttpClient(options);
         var ownsHttpClient = options.HttpClient == null;
-
-        if (options.Timeout.HasValue)
-        {
-            httpClient.Timeout = options.Timeout.Value;
-        }
 
         var tokenProvider = new SessionTokenProvider(httpClient, sessionStore: options.SessionStore, loggerFactory: options.LoggerFactory);
         tokenProvider.RestoreSession(accessJwt, refreshJwt, did, handle, pdsUrl);
@@ -277,13 +283,8 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
 
         options.BaseUrl ??= new Uri(BlueskyServices.PublicAppView);
 
-        var httpClient = options.HttpClient ?? new HttpClient();
+        var httpClient = options.HttpClient ?? CreateOwnedHttpClient(options);
         var ownsHttpClient = options.HttpClient == null;
-
-        if (options.Timeout.HasValue)
-        {
-            httpClient.Timeout = options.Timeout.Value;
-        }
 
         var tokenProvider = new SessionTokenProvider(httpClient, sessionStore: options.SessionStore, loggerFactory: options.LoggerFactory);
         options.TokenProvider = tokenProvider;
@@ -313,13 +314,9 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         _loggerFactory = options.LoggerFactory ?? NullLoggerFactory.Instance;
         _logger = _loggerFactory.CreateLogger<ATProtoClient>();
 
-        var httpClient = options.HttpClient ?? new HttpClient();
+        var httpClient = options.HttpClient ?? CreateOwnedHttpClient(options);
         _ownsHttpClient = ownsHttpClient;
-
-        if (options.Timeout.HasValue && ownsHttpClient)
-        {
-            httpClient.Timeout = options.Timeout.Value;
-        }
+        _userAgent = options.UserAgent;
 
         var jsonOptions = options.JsonOptions ?? throw new ArgumentException("JsonOptions must be provided.", nameof(options));
         var cborContext = options.CborContext ?? throw new ArgumentException("CborContext must be provided.", nameof(options));
@@ -329,7 +326,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         _cborContext = cborContext;
         _tokenProvider = options.TokenProvider;
         _autoRetryOnAuthFailure = options.AutoRetryOnAuthFailure;
-        LabelerDids = options.LabelerDids;
+        _labelerDids = options.LabelerDids?.ToArray();
 
         // Store configured base URL (null means dynamic - will use token provider's PDS URL)
         _configuredBaseUrl = options.BaseUrl ?? _tokenProvider?.PdsUrl;
@@ -341,7 +338,7 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
         }
         else if (options.CreateIdentityResolver)
         {
-            IdentityResolver = new IdentityResolver(httpClient, dnsResolver: new DefaultDnsResolver(), cache: new MemoryIdentityCache(), loggerFactory: _loggerFactory);
+            IdentityResolver = new IdentityResolver(httpClient, cache: new MemoryIdentityCache(), loggerFactory: _loggerFactory);
         }
 
         _ownsTokenProvider = ownsTokenProvider;
@@ -354,90 +351,47 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
     #region IATProtoClient Implementation
 
     /// <inheritdoc/>
-    public async Task<TOutput> GetAsync<TOutput>(
+    public Task<TOutput> GetAsync<TOutput>(
         string nsid,
         IEnumerable<KeyValuePair<string, string>>? parameters = null,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        _logger.LogDebug("Sending GET {Nsid}", nsid);
-
-        var url = await XrpcHttpHandler.BuildUrlAsync(
-            this.TokenProvider?.PdsUrl ?? BaseUrl, nsid, parameters,
-            this.IdentityResolver, _logger, cancellationToken).ConfigureAwait(false);
-
-        using var request = XrpcHttpHandler.CreateGetRequest(url, proxyServiceDid: null, LabelerDids);
-        await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
-
-        var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, _logger, cancellationToken).ConfigureAwait(false);
+        return this.QueryAsync<TOutput>(nsid, parameters, null, cancellationToken);
     }
 
     /// <inheritdoc/>
-    public async Task<TOutput> GetAsync<TOutput>(
+    public Task<TOutput> GetAsync<TOutput>(
         string nsid,
         string proxyServiceDid,
         IEnumerable<KeyValuePair<string, string>>? parameters = null,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-
-        var url = await XrpcHttpHandler.BuildUrlAsync(
-            this.TokenProvider?.PdsUrl ?? BaseUrl, nsid, parameters,
-            this.IdentityResolver, _logger, cancellationToken).ConfigureAwait(false);
-        using var request = XrpcHttpHandler.CreateGetRequest(url, proxyServiceDid, LabelerDids);
-        await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
-
-        var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, _logger, cancellationToken).ConfigureAwait(false);
+        return this.QueryAsync<TOutput>(nsid, parameters, new XrpcRequestOptions { ProxyServiceDid = proxyServiceDid }, cancellationToken);
     }
 
     /// <inheritdoc/>
-    public async Task<TOutput> PostAsync<TInput, TOutput>(
+    public Task<TOutput> PostAsync<TInput, TOutput>(
         string nsid,
         TInput? input,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        _logger.LogDebug("Sending POST {Nsid}", nsid);
-
-        if (_tokenProvider == null)
-        {
-            throw new InvalidOperationException(
-                "Cannot make POST requests without authentication. " +
-                "Use CreateWithSessionAsync or provide a TokenProvider.");
-        }
-
-        var url = XrpcHttpHandler.BuildUrl(this.TokenProvider?.PdsUrl ?? BaseUrl, nsid);
-        using var request = XrpcHttpHandler.CreatePostRequest(url, input, _jsonOptions, proxyServiceDid: null, LabelerDids);
-        await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
-
-        var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, _logger, cancellationToken).ConfigureAwait(false);
+        ThrowIfNoTokenProvider();
+        return this.ProcedureAsync<TInput, TOutput>(nsid, null, input, null, cancellationToken);
     }
 
     /// <inheritdoc/>
-    public async Task<TOutput> PostAsync<TInput, TOutput>(
+    public Task<TOutput> PostAsync<TInput, TOutput>(
         string nsid,
         string proxyServiceDid,
         TInput? input,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-
-        if (_tokenProvider == null)
-        {
-            throw new InvalidOperationException(
-                "Cannot make POST requests without authentication. " +
-                "Use CreateWithSessionAsync or provide a TokenProvider.");
-        }
-
-        var url = XrpcHttpHandler.BuildUrl(this.TokenProvider?.PdsUrl ?? BaseUrl, nsid);
-        using var request = XrpcHttpHandler.CreatePostRequest(url, input, _jsonOptions, proxyServiceDid, LabelerDids);
-        await AddAuthHeaderAsync(request, cancellationToken).ConfigureAwait(false);
-
-        var response = await SendWithRetryAsync(request, cancellationToken).ConfigureAwait(false);
-        return await XrpcHttpHandler.ProcessResponseAsync<TOutput>(response, _jsonOptions, _logger, cancellationToken).ConfigureAwait(false);
+        ThrowIfNoTokenProvider();
+        return this.ProcedureAsync<TInput, TOutput>(nsid, null, input, new XrpcRequestOptions { ProxyServiceDid = proxyServiceDid }, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -469,56 +423,178 @@ public sealed class ATProtoClient : IATProtoClient, IDisposable
 
     #endregion
 
-    #region Private Methods
+    #region IXrpcRequestClient Implementation
 
-    private async Task AddAuthHeaderAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Requests go to the session's PDS unless <see cref="XrpcRequestOptions.ServiceUrl"/> is set.
+    /// A query with a <c>repo</c> parameter and no proxy is sent to that repo's PDS when an
+    /// <see cref="IdentityResolver"/> is configured.
+    /// </para>
+    /// <para>
+    /// The access token is attached only when the request goes to the session's own PDS, so
+    /// credentials are never sent to another server. A 401 from the PDS triggers one token refresh
+    /// and retry when the body can be replayed.
+    /// </para>
+    /// </remarks>
+    public async Task<HttpResponseMessage> SendXrpcAsync(XrpcRequest request, CancellationToken cancellationToken = default)
     {
-        if (_tokenProvider == null)
-            return;
+        ThrowIfDisposed();
+        if (request == null)
+            throw new ArgumentNullException(nameof(request));
 
-        var token = await _tokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        if (!string.IsNullOrEmpty(token))
-        {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        }
-    }
+        var options = request.Options;
+        var proxy = options?.EffectiveProxyServiceDid;
+        var url = await ResolveRequestUrlAsync(request, proxy, cancellationToken).ConfigureAwait(false);
+        var attachCredentials = ShouldAttachCredentials(url, options);
 
-    private async Task<HttpResponseMessage> SendWithRetryAsync(
-        HttpRequestMessage request,
-        CancellationToken cancellationToken)
-    {
-        var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        _logger.LogDebug("Sending {Method} {Nsid}", request.Method, request.Nsid);
 
-        // Retry on 401 if auto-retry is enabled and we have a token provider
+        var response = await SendOnceAsync(request, url, proxy, attachCredentials, isRetry: false, cancellationToken).ConfigureAwait(false);
+
         if (_autoRetryOnAuthFailure &&
+            attachCredentials &&
             response.StatusCode == System.Net.HttpStatusCode.Unauthorized &&
-            _tokenProvider != null)
+            (request.Body == null || request.Body.IsReplayable))
         {
             _logger.LogWarning("Received 401, refreshing token and retrying");
             try
             {
-                await _tokenProvider.RefreshAsync(cancellationToken).ConfigureAwait(false);
-
-                // Create a new request and retry
-                using var retryRequest = XrpcHttpHandler.CloneRequest(request, "Authorization");
-                await AddAuthHeaderAsync(retryRequest, cancellationToken).ConfigureAwait(false);
-
-                response.Dispose();
-                return await _httpClient.SendAsync(retryRequest, cancellationToken).ConfigureAwait(false);
+                await _tokenProvider!.RefreshAsync(cancellationToken).ConfigureAwait(false);
             }
-            catch (AuthenticationException)
+            catch (ATProtoException)
             {
+                // Includes AuthenticationException and the 400 a rejected refresh token gets.
                 _logger.LogWarning("Token refresh failed, returning 401");
-                // Refresh failed, return original 401 response
+                return response;
             }
             catch (InvalidOperationException)
             {
                 _logger.LogWarning("Token refresh failed, returning 401");
-                // No refresh token available
+                return response;
             }
+
+            response.Dispose();
+            response = await SendOnceAsync(request, url, proxy, attachCredentials, isRetry: true, cancellationToken).ConfigureAwait(false);
         }
 
         return response;
+    }
+
+    #endregion
+
+    #region Private Methods
+
+    private static HttpClient CreateOwnedHttpClient(ATProtoClientOptions options)
+    {
+        return HttpClientFactory.Create(new HttpClientFactoryOptions
+        {
+            Timeout = options.Timeout,
+            UserAgent = options.UserAgent,
+            EnableRateLimitHandler = options.EnableRateLimitHandler,
+            AutoRetryOnRateLimit = options.AutoRetryOnRateLimit,
+            RateLimitMaxRetries = options.RateLimitMaxRetries,
+            LoggerFactory = options.LoggerFactory,
+        });
+    }
+
+    private void ThrowIfNoTokenProvider()
+    {
+        if (_tokenProvider == null)
+        {
+            throw new InvalidOperationException(
+                "Cannot make POST requests without authentication. " +
+                "Use CreateWithSessionAsync or provide a TokenProvider.");
+        }
+    }
+
+    private async Task<Uri> ResolveRequestUrlAsync(XrpcRequest request, string? proxy, CancellationToken cancellationToken)
+    {
+        var serviceUrl = request.Options?.ServiceUrl;
+        if (serviceUrl != null)
+        {
+            return XrpcHttpHandler.BuildUrl(serviceUrl, request.Nsid, request.Parameters);
+        }
+
+        var baseUrl = _tokenProvider?.PdsUrl ?? BaseUrl;
+        if (request.Method == HttpMethod.Get && proxy == null)
+        {
+            return await XrpcHttpHandler.BuildUrlAsync(
+                baseUrl, request.Nsid, request.Parameters,
+                IdentityResolver, _logger, cancellationToken).ConfigureAwait(false);
+        }
+
+        return XrpcHttpHandler.BuildUrl(baseUrl, request.Nsid, request.Parameters);
+    }
+
+    private bool ShouldAttachCredentials(Uri url, XrpcRequestOptions? options)
+    {
+        if (_tokenProvider == null || options?.ServiceUrl != null || HasAuthorizationHeader(options))
+        {
+            return false;
+        }
+
+        var credentialOrigin = _tokenProvider.PdsUrl ?? _configuredBaseUrl;
+        return credentialOrigin != null && XrpcHttpHandler.IsSameOrigin(url, credentialOrigin);
+    }
+
+    private static bool HasAuthorizationHeader(XrpcRequestOptions? options)
+    {
+        if (options?.Headers == null)
+        {
+            return false;
+        }
+
+        foreach (var header in options.Headers)
+        {
+            if (header.Key.Equals("Authorization", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private async Task<HttpResponseMessage> SendOnceAsync(
+        XrpcRequest request,
+        Uri url,
+        string? proxy,
+        bool attachCredentials,
+        bool isRetry,
+        CancellationToken cancellationToken)
+    {
+        using var message = new HttpRequestMessage(request.Method, url);
+        XrpcHttpHandler.AddCommonHeaders(message, proxy, request.Options?.AcceptLabelers ?? LabelerDids);
+        XrpcHttpHandler.AddCustomHeaders(message, request.Options?.Headers);
+
+        if (_userAgent != null && message.Headers.UserAgent.Count == 0 && _httpClient.DefaultRequestHeaders.UserAgent.Count == 0)
+        {
+            message.Headers.TryAddWithoutValidation("User-Agent", _userAgent);
+        }
+
+        if (request.Body != null)
+        {
+            message.Content = request.Body.CreateContent()
+                ?? throw new InvalidOperationException("The request body has already been sent and cannot be replayed.");
+        }
+
+        if (attachCredentials)
+        {
+            var token = await _tokenProvider!.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(token))
+            {
+                message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            }
+        }
+
+        if (isRetry)
+        {
+            _logger.LogDebug("Retrying {Method} {Nsid}", request.Method, request.Nsid);
+        }
+
+        return await _httpClient.SendAsync(message, cancellationToken).ConfigureAwait(false);
     }
 
     private void ThrowIfDisposed()

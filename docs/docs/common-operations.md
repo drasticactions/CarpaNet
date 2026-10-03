@@ -71,6 +71,26 @@ foreach (var item in timeline.Feed)
 }
 ```
 
+## Upload and Download Blobs
+
+Blob calls use the client's own authentication, so they work with app-password and OAuth (DPoP)
+clients alike. The upload streams the content without buffering it.
+
+```csharp
+using CarpaNet.Blob;
+using CarpaNet.Http;
+
+await using var file = File.OpenRead("photo.jpg");
+var progress = new Progress<long>(sent => Console.WriteLine($"{sent} bytes"));
+var blobRef = await client.UploadBlobAsync(new ProgressReportingStream(file, progress), "image/jpeg");
+
+// Generated records use ATBlob
+ATBlob image = blobRef.ToATBlob();
+
+// Another account's blob is fetched from that account's PDS, without your credentials.
+byte[] data = await client.DownloadBlobAsync(new ATDid(ownerDid), image.Ref);
+```
+
 ## AT Protocol Types
 
 CarpaNet provides strongly-typed wrappers for AT Protocol identifiers:

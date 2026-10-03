@@ -26,6 +26,7 @@ public sealed class OAuthSession : IDisposable
     private readonly IOAuthSessionStore _sessionStore;
     private readonly AuthorizationServerDiscovery _discovery;
     private readonly IdentityResolver _identityResolver;
+    private readonly bool _ownsIdentityResolver;
     private readonly ILogger<OAuthSession> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private bool _disposed;
@@ -47,7 +48,8 @@ public sealed class OAuthSession : IDisposable
         _stateStore = config.StateStore ?? new MemoryOAuthStateStore();
         _sessionStore = config.SessionStore ?? new MemoryOAuthSessionStore();
         _discovery = new AuthorizationServerDiscovery(_httpClient, loggerFactory: _loggerFactory);
-        _identityResolver = config.IdentityResolver ?? new IdentityResolver(_httpClient, dnsResolver: new CarpaNet.Identity.DefaultDnsResolver(), cache: new MemoryIdentityCache(), loggerFactory: _loggerFactory);
+        _ownsIdentityResolver = config.IdentityResolver == null;
+        _identityResolver = config.IdentityResolver ?? new IdentityResolver(_httpClient, cache: new MemoryIdentityCache(), loggerFactory: _loggerFactory);
     }
 
     /// <summary>
@@ -66,7 +68,7 @@ public sealed class OAuthSession : IDisposable
         _logger.LogInformation("Starting OAuth authorization for {Input}", input);
 
         // Resolve identity to find PDS and authorization server
-        var (pdsUrl, issuer, serverMetadata) = await ResolveIdentityAsync(input, cancellationToken).ConfigureAwait(false);
+        var (pdsUrl, issuer, serverMetadata, expectedSub) = await ResolveIdentityAsync(input, cancellationToken).ConfigureAwait(false);
 
         // Generate PKCE
         var (verifier, challenge) = Pkce.Generate();
@@ -85,6 +87,7 @@ public sealed class OAuthSession : IDisposable
             Verifier = verifier,
             AppState = appState,
             PdsUrl = pdsUrl,
+            ExpectedSub = expectedSub,
             ExpiresAt = DateTimeOffset.UtcNow + _config.StateExpiration
         };
 
@@ -158,9 +161,21 @@ public sealed class OAuthSession : IDisposable
     /// <summary>
     /// Handles the OAuth callback and exchanges the code for tokens.
     /// </summary>
+    /// <remarks>
+    /// The callback is validated before the session is created:
+    /// <list type="bullet">
+    /// <item><description>The <c>iss</c> parameter (RFC 9207) must match the issuer the flow was started with. It is
+    /// required when the server advertises <c>authorization_response_iss_parameter_supported</c>.</description></item>
+    /// <item><description>The token response's <c>sub</c> must be an atproto DID, must match the account the flow was
+    /// started for (when started from a handle or DID), and the PDS in its DID document must be protected by the
+    /// issuer that issued the tokens. The session's PDS URL is taken from that DID document.</description></item>
+    /// </list>
+    /// When <c>sub</c> validation fails, the tokens are revoked and the session is not stored.
+    /// </remarks>
     /// <param name="callbackUrl">The full callback URL with query parameters.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The OAuth session.</returns>
+    /// <exception cref="OAuthCallbackException">The callback contains an error, or fails <c>iss</c> or <c>sub</c> validation.</exception>
     public async Task<ATProtoOAuthClient> CallbackAsync(
         string callbackUrl,
         CancellationToken cancellationToken = default)
@@ -189,9 +204,10 @@ public sealed class OAuthSession : IDisposable
             throw new OAuthCallbackException(error, errorDescription, appState);
         }
 
-        // Get code and state
+        // Get code, state and issuer
         var code = query["code"];
         var stateParam = query["state"];
+        var issParam = query["iss"];
 
         if (string.IsNullOrEmpty(code))
         {
@@ -220,6 +236,9 @@ public sealed class OAuthSession : IDisposable
                 storedState.Issuer,
                 cancellationToken).ConfigureAwait(false);
 
+            // Validate the iss parameter (RFC 9207) before redeeming the code
+            ValidateIssuerParameter(issParam, storedState, serverMetadata);
+
             _logger.LogDebug("Exchanging authorization code");
             // Exchange code for tokens
             var tokenSet = await ExchangeCodeAsync(
@@ -230,7 +249,23 @@ public sealed class OAuthSession : IDisposable
                 cancellationToken).ConfigureAwait(false);
 
             tokenSet.Issuer = storedState.Issuer;
-            tokenSet.Audience = storedState.PdsUrl ?? string.Empty;
+
+            // The token response MUST be verified before its "sub" can be trusted. The session's
+            // PDS (DPoP audience) is the one from the sub's DID document, not the URL the flow
+            // was started from (which may be an entryway).
+            try
+            {
+                tokenSet.Audience = await VerifySubjectAsync(
+                    tokenSet.Sub,
+                    storedState,
+                    serverMetadata,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                await TryRevokeTokenAsync(serverMetadata, tokenSet, dpopKey).ConfigureAwait(false);
+                throw;
+            }
 
             // Create token provider
             var tokenProvider = new DPoPTokenProvider(
@@ -241,7 +276,8 @@ public sealed class OAuthSession : IDisposable
                 _config.ClientId,
                 _config.RedirectUri,
                 _config.Scope,
-                loggerFactory: _loggerFactory);
+                loggerFactory: _loggerFactory,
+                identityResolver: _identityResolver);
 
             await tokenProvider.SetupAsync(
                 tokenSet.Sub,
@@ -262,7 +298,8 @@ public sealed class OAuthSession : IDisposable
                 identityResolver: _identityResolver,
                 _config.JsonOptions,
                 _config.LabelerDids,
-                loggerFactory: _loggerFactory);
+                loggerFactory: _loggerFactory,
+                httpClient: _httpClient);
         }
         catch
         {
@@ -292,7 +329,8 @@ public sealed class OAuthSession : IDisposable
             _config.ClientId,
             _config.RedirectUri,
             _config.Scope,
-            loggerFactory: _loggerFactory);
+            loggerFactory: _loggerFactory,
+            identityResolver: _identityResolver);
 
         var restored = await tokenProvider.RestoreSessionAsync(sub, cancellationToken).ConfigureAwait(false);
         if (!restored)
@@ -310,7 +348,8 @@ public sealed class OAuthSession : IDisposable
             identityResolver: _identityResolver,
             _config.JsonOptions,
             _config.LabelerDids,
-            loggerFactory: _loggerFactory);
+            loggerFactory: _loggerFactory,
+            httpClient: _httpClient);
     }
 
     /// <summary>
@@ -337,22 +376,12 @@ public sealed class OAuthSession : IDisposable
                 sessionData.TokenSet.Issuer,
                 cancellationToken).ConfigureAwait(false);
 
-            if (!string.IsNullOrEmpty(serverMetadata.RevocationEndpoint) &&
-                !string.IsNullOrEmpty(sessionData.TokenSet.RefreshToken))
+            if (!string.IsNullOrEmpty(sessionData.TokenSet.RefreshToken))
             {
                 var dpopKey = DPoPKeyPair.Import(sessionData.DPoPKey);
                 try
                 {
-                    using var request = new HttpRequestMessage(HttpMethod.Post, serverMetadata.RevocationEndpoint);
-
-                    var nonce = new DPoPNonceCache().Get(serverMetadata.RevocationEndpoint!);
-                    var proof = await dpopKey.CreateProofAsync("POST", serverMetadata.RevocationEndpoint!, nonce).ConfigureAwait(false);
-                    request.Headers.Add("DPoP", proof);
-
-                    var content = $"token={Uri.EscapeDataString(sessionData.TokenSet.RefreshToken)}&token_type_hint=refresh_token";
-                    request.Content = new StringContent(content, Encoding.UTF8, "application/x-www-form-urlencoded");
-
-                    await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                    await TryRevokeTokenAsync(serverMetadata, sessionData.TokenSet, dpopKey).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -370,12 +399,13 @@ public sealed class OAuthSession : IDisposable
         await _sessionStore.DeleteAsync(sub, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<(string pdsUrl, string issuer, OAuthAuthorizationServerMetadata metadata)> ResolveIdentityAsync(
+    private async Task<(string pdsUrl, string issuer, OAuthAuthorizationServerMetadata metadata, string? did)> ResolveIdentityAsync(
         string input,
         CancellationToken cancellationToken)
     {
         string pdsUrl;
         string issuer;
+        string? did = null;
 
         // Check if input is a URL
         if (Uri.TryCreate(input, UriKind.Absolute, out var inputUri) &&
@@ -388,8 +418,11 @@ public sealed class OAuthSession : IDisposable
             // Resolve handle or DID to PDS
             var didDoc = await _identityResolver.ResolveAsync(input, cancellationToken).ConfigureAwait(false);
 
-            pdsUrl = didDoc.PdsEndpoint
+            pdsUrl = didDoc.PdsEndpoint?.TrimEnd('/')
                 ?? throw new OAuthException("pds_not_found", $"No PDS URL found for: {input}");
+
+            // The account the user must sign in as
+            did = !string.IsNullOrEmpty(didDoc.Id) ? didDoc.Id : null;
         }
         else
         {
@@ -404,7 +437,182 @@ public sealed class OAuthSession : IDisposable
         // Get server metadata
         var metadata = await _discovery.GetMetadataAsync(issuer, cancellationToken).ConfigureAwait(false);
 
-        return (pdsUrl, issuer, metadata);
+        return (pdsUrl, issuer, metadata, did);
+    }
+
+    /// <summary>
+    /// Validates the RFC 9207 <c>iss</c> authorization response parameter.
+    /// </summary>
+    private void ValidateIssuerParameter(
+        string? issParam,
+        OAuthStateData storedState,
+        OAuthAuthorizationServerMetadata serverMetadata)
+    {
+        if (issParam != null)
+        {
+            if (!IsIssuer(issParam, storedState, serverMetadata))
+            {
+                _logger.LogWarning("Callback issuer mismatch: expected {Expected}, got {Actual}", storedState.Issuer, issParam);
+                throw new OAuthCallbackException(
+                    "issuer_mismatch",
+                    $"Callback issuer '{issParam}' does not match expected issuer '{storedState.Issuer}'.",
+                    storedState.AppState);
+            }
+        }
+        else if (serverMetadata.AuthorizationResponseIssParameterSupported)
+        {
+            _logger.LogWarning("Callback is missing the iss parameter required by {Issuer}", storedState.Issuer);
+            throw new OAuthCallbackException(
+                "missing_iss",
+                "The iss parameter is missing from the authorization response.",
+                storedState.AppState);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that the token response's subject is an atproto DID whose PDS is protected by the
+    /// issuer that issued the tokens.
+    /// </summary>
+    /// <returns>The user's PDS URL (the resource server and DPoP audience).</returns>
+    private async Task<string> VerifySubjectAsync(
+        string sub,
+        OAuthStateData storedState,
+        OAuthAuthorizationServerMetadata serverMetadata,
+        CancellationToken cancellationToken)
+    {
+        if (!AtprotoSyntax.IsAtprotoDid(sub))
+        {
+            throw new OAuthCallbackException(
+                "invalid_sub",
+                $"Token response subject '{sub}' is not a valid atproto DID.",
+                storedState.AppState);
+        }
+
+        if (storedState.ExpectedSub != null && !string.Equals(sub, storedState.ExpectedSub, StringComparison.Ordinal))
+        {
+            _logger.LogWarning("Token subject {Sub} does not match expected {Expected}", sub, storedState.ExpectedSub);
+            throw new OAuthCallbackException(
+                "sub_mismatch",
+                $"Token response subject '{sub}' does not match the account authorization was started for ('{storedState.ExpectedSub}').",
+                storedState.AppState);
+        }
+
+        string pdsUrl;
+        OAuthProtectedResourceMetadata resourceMetadata;
+        try
+        {
+            // Always resolve fresh: a stale DID document could point to a previous PDS
+            var didDoc = await _identityResolver.ResolveDidAsync(sub, skipCache: true, cancellationToken).ConfigureAwait(false);
+
+            if (!string.Equals(didDoc.Id, sub, StringComparison.Ordinal))
+            {
+                throw new OAuthCallbackException(
+                    "invalid_sub",
+                    $"DID document id '{didDoc.Id}' does not match token subject '{sub}'.",
+                    storedState.AppState);
+            }
+
+            var endpoint = didDoc.PdsEndpoint;
+            if (string.IsNullOrEmpty(endpoint) ||
+                !Uri.TryCreate(endpoint, UriKind.Absolute, out var endpointUri) ||
+                (endpointUri.Scheme != "https" && endpointUri.Scheme != "http"))
+            {
+                throw new OAuthCallbackException(
+                    "pds_not_found",
+                    $"No valid PDS endpoint found in the DID document of '{sub}'.",
+                    storedState.AppState);
+            }
+
+            pdsUrl = endpoint!.TrimEnd('/');
+            resourceMetadata = await _discovery.GetProtectedResourceMetadataAsync(pdsUrl, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OAuthCallbackException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new OAuthCallbackException(
+                "sub_verification_failed",
+                $"Failed to verify token subject '{sub}': {ex.Message}",
+                storedState.AppState,
+                ex);
+        }
+
+        foreach (var server in resourceMetadata.AuthorizationServers!)
+        {
+            if (server != null && IsIssuer(server, storedState, serverMetadata))
+            {
+                _logger.LogDebug("Token subject {Sub} verified: PDS={PdsUrl}", sub, pdsUrl);
+                return pdsUrl;
+            }
+        }
+
+        // Best case: the user switched PDS. Worst case: a malicious server is trying to
+        // impersonate a user. Either way, these tokens must not be used.
+        _logger.LogWarning("PDS {PdsUrl} of {Sub} is not protected by issuer {Issuer}", pdsUrl, sub, storedState.Issuer);
+        throw new OAuthCallbackException(
+            "sub_issuer_mismatch",
+            $"The PDS of '{sub}' ({pdsUrl}) is not protected by issuer '{storedState.Issuer}'.",
+            storedState.AppState);
+    }
+
+    private static bool IsIssuer(string value, OAuthStateData storedState, OAuthAuthorizationServerMetadata serverMetadata)
+    {
+        // The stored issuer and the metadata issuer were verified to be the same issuer
+        // (case-insensitively) when the metadata was fetched; accept either exact spelling.
+        return string.Equals(value, serverMetadata.Issuer, StringComparison.Ordinal) ||
+               string.Equals(value, storedState.Issuer, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Best-effort revocation of a token set at the authorization server. Revoking the refresh
+    /// token revokes the whole grant; the access token is used when no refresh token exists.
+    /// </summary>
+    private async Task TryRevokeTokenAsync(
+        OAuthAuthorizationServerMetadata serverMetadata,
+        TokenSet tokenSet,
+        DPoPKeyPair dpopKey)
+    {
+        var endpoint = serverMetadata.RevocationEndpoint;
+        if (string.IsNullOrEmpty(endpoint))
+        {
+            return;
+        }
+
+        var (token, hint) = !string.IsNullOrEmpty(tokenSet.RefreshToken)
+            ? (tokenSet.RefreshToken!, "refresh_token")
+            : (tokenSet.AccessToken, "access_token");
+
+        if (string.IsNullOrEmpty(token))
+        {
+            return;
+        }
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+            var proof = await dpopKey.CreateProofAsync("POST", endpoint!, null).ConfigureAwait(false);
+            request.Headers.Add("DPoP", proof);
+
+            var content = BuildFormContent(new Dictionary<string, string>
+            {
+                ["token"] = token,
+                ["token_type_hint"] = hint,
+                ["client_id"] = _config.ClientId
+            });
+            request.Content = new StringContent(content, Encoding.UTF8, "application/x-www-form-urlencoded");
+
+            using var response = await _httpClient.SendAsync(request, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Token revocation failed: {Message}", ex.Message);
+        }
     }
 
     private async Task<string> PushAuthorizationRequestAsync(
@@ -639,7 +847,11 @@ public sealed class OAuthSession : IDisposable
         _disposed = true;
 
         _discovery.Dispose();
-        _identityResolver?.Dispose();
+
+        if (_ownsIdentityResolver)
+        {
+            _identityResolver.Dispose();
+        }
 
         if (_ownsHttpClient)
         {

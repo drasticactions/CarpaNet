@@ -78,7 +78,7 @@ var client = await ATProtoClient.CreateWithSessionAsync(
 
 ## Identity Resolution
 
-`IdentityResolver` resolves handles to DIDs and DIDs to DID documents. Supports both `did:plc` (via PLC directory) and `did:web`. Handle resolution uses DNS TXT records with HTTPS fallback.
+`IdentityResolver` resolves handles to DIDs and DIDs to DID documents. Supports both `did:plc` (via PLC directory) and `did:web`. Handle resolution uses DNS TXT records, then HTTPS well-known, then (optionally) the `com.atproto.identity.resolveHandle` XRPC method on a service that you configure with `IdentityResolverOptions`. In browsers, DNS uses DNS-over-HTTPS (`DnsOverHttpsResolver`) because UDP is not available.
 
 ```csharp
 var resolver = IdentityResolver.CreateWithCache();
@@ -233,10 +233,12 @@ This differs from `LexiconResolveAuthority` in that it takes a user handle rathe
 
 | Property | Description | Default |
 |---|---|---|
-| `CarpaNet_SourceGen_RootNamespace` | Root namespace for generated code | Project's root namespace |
+| `CarpaNet_RootNamespace` | Root namespace for generated code | None (namespaces come from the NSID) |
 | `CarpaNet_JsonContextName` | Name for the generated `JsonSerializerContext` class | `ATProtoJsonContext` |
 | `CarpaNet_CborContextName` | Name for the generated `CborSerializerContext` class | `ATProtoCborContext` |
-| `CarpaNet_EmitValidationAttributes` | Emit validation attributes on generated properties | `false` |
+| `CarpaNet_EmitValidationAttributes` | Emit validation attributes on generated properties | `true` |
+
+The older `CarpaNet_SourceGen_RootNamespace`, `CarpaNet_SourceGen_JsonContextName`, `CarpaNet_SourceGen_CborContextName` and `CarpaNet_SourceGen_EmitValidationAttributes` names are still accepted. If both are set, the `CarpaNet_*` name wins.
 
 ### Lexicon Resolution
 
@@ -296,11 +298,24 @@ await client.AppBskyActorGetProfileAsync(parameters);
 await client.ComAtprotoRepoCreateRecordAsync(input);
 ```
 
-Query parameters are gathered into a `*Parameters` class with a `ToQueryParameters()` method returning `IEnumerable<KeyValuePair<string, string>>` (so array params like `uris` can emit repeated keys). Procedure inputs use an `*Input` class. Subscriptions generate `SubscribeAsync` extensions returning `IAsyncEnumerable<T>`.
+Query parameters are gathered into a `*Parameters` class with a `ToQueryParameters()` method returning `IEnumerable<KeyValuePair<string, string>>` (so array params like `uris` can emit repeated keys). Procedures that declare `parameters` get the same class and an extra `parameters` argument. Procedure inputs use an `*Input` class. Subscriptions generate `SubscribeAsync` extensions returning `IAsyncEnumerable<T>`.
+
+Endpoints that do not use JSON bodies get different signatures:
+
+```csharp
+// Procedure with a non-JSON input (com.atproto.repo.uploadBlob, encoding */*):
+// the body is a Stream; contentType defaults to the lexicon encoding, or application/octet-stream for wildcards
+var upload = await client.ComAtprotoRepoUploadBlobAsync(stream, "image/png");
+
+// Query with a non-JSON output (com.atproto.sync.getBlob, com.atproto.sync.getRepo): returns the raw bytes
+byte[] car = await client.ComAtprotoSyncGetRepoAsync(new ComAtproto.Sync.GetRepoParameters { Did = did });
+```
 
 ### Union types (`UnionImplementations.g.cs`)
 
 Lexicon `union` references become discriminated union classes with `System.Text.Json` polymorphic serialization via `[JsonPolymorphic]` and `[JsonDerivedType]` attributes.
+
+Open unions (no `closed: true`) can contain members from newer lexicon versions. For each open union interface `I{Name}`, the generator also emits a sealed `Unknown_{Name}` class (for example `AppBsky.Actor.Unknown_DefsPreferences`). A member with an unknown or missing `$type` is read into this class instead of being dropped. It has `Type` (the `$type` value, or an empty string), `Raw` (the whole member as a `JsonElement`) and, when read from CBOR, `RawCbor` (the original bytes). Serialization writes the member back unchanged, so a read-modify-write cycle does not lose data. The underscore keeps the name from colliding with lexicon-derived names, which never contain one after the first character. Closed unions still throw on an unknown `$type`.
 
 ### JSON serialization context (`ATProtoJsonContext.g.cs`)
 

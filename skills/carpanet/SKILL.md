@@ -92,8 +92,8 @@ This scans your lexicons for `ref` fields pointing to external NSIDs, resolves t
 |----------|---------|-------------|
 | `CarpaNet_JsonContextName` | `ATProtoJsonContext` | Name of the generated JSON serializer context |
 | `CarpaNet_CborContextName` | `ATProtoCborContext` | Name of the generated CBOR serializer context |
-| `CarpaNet_SourceGen_RootNamespace` | Project namespace | Root namespace for generated code |
-| `CarpaNet_SourceGen_EmitValidationAttributes` | `false` | Emit `[ATStringLength]`, `[Range]` attributes |
+| `CarpaNet_RootNamespace` | None (from NSID) | Root namespace prefix for generated code |
+| `CarpaNet_EmitValidationAttributes` | `true` | Emit `[ATStringLength]`, `[ATRange]` validation attributes |
 | `CarpaNet_LexiconAutoResolve` | `false` | Auto-resolve transitive lexicon dependencies |
 | `CarpaNet_LexiconAutoResolveMaxDepth` | `10` | Max iterations for transitive resolution |
 | `CarpaNet_LexiconCacheDir` | `obj/lexicon-cache/` | Cache directory for resolved lexicons |
@@ -101,6 +101,8 @@ This scans your lexicons for `ref` fields pointing to external NSIDs, resolves t
 | `CarpaNet_LexiconFailOnError` | `true` | Fail build on resolution errors |
 | `CarpaNet_PlcDirectoryUrl` | `https://plc.directory` | PLC directory URL |
 | `CarpaNet_DnsServers` | (empty) | Semicolon-separated DNS server IPs |
+
+The older `CarpaNet_SourceGen_RootNamespace`, `CarpaNet_SourceGen_JsonContextName`, `CarpaNet_SourceGen_CborContextName` and `CarpaNet_SourceGen_EmitValidationAttributes` names still work. If both names are set, the `CarpaNet_*` name wins.
 
 ### Inspecting Generated Code
 
@@ -546,6 +548,19 @@ var didDoc2 = await resolver.ResolveAsync("did:plc:z72i7hdynmk6r22z27h6tvur");
 ```
 
 The `ATProtoClient` creates an `IdentityResolver` automatically (configurable via `ATProtoClientOptions.CreateIdentityResolver`).
+
+Handle resolution tries DNS TXT, then HTTPS well-known, then the `com.atproto.identity.resolveHandle` XRPC method (only if a service URL is set). In browsers (WASM), use DNS-over-HTTPS and an XRPC service, because UDP is unavailable and well-known requests are usually blocked by CORS:
+
+```csharp
+var resolver = new IdentityResolver(httpClient, new IdentityResolverOptions
+{
+    Cache = new MemoryIdentityCache(),
+    DnsResolver = new DnsOverHttpsResolver(httpClient), // default in browsers via DnsResolverDefaults.CreateDefault
+    HandleResolutionServiceUrl = IdentityResolverOptions.PublicBlueskyAppViewUrl, // or the user's PDS
+});
+```
+
+A DID from the XRPC method is only as trustworthy as the service. `ResolveAsync` still checks that the DID document claims the handle.
 
 ---
 

@@ -202,8 +202,10 @@ public class TypeRegistryTests
 
         registry.RegisterDocument(doc);
 
+        // Qualified with the union's namespace: the ref crosses namespaces (app.bsky.feed -> app.bsky),
+        // and an unqualified interface name would not compile there.
         var result = registry.ResolveToCSharpType("app.bsky.embed#embedUnion", "app.bsky.feed.post");
-        Assert.Equal("IEmbedEmbedUnion", result);
+        Assert.Equal("AppBsky.IEmbedEmbedUnion", result);
     }
 
     [Fact]

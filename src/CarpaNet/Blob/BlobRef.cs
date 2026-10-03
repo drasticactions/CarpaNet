@@ -31,6 +31,22 @@ public sealed class BlobRef
     /// </summary>
     [JsonPropertyName("size")]
     public long Size { get; set; }
+
+    /// <summary>
+    /// Converts this reference to the <see cref="ATBlob"/> type used by generated records.
+    /// </summary>
+    /// <returns>The blob.</returns>
+    /// <exception cref="InvalidOperationException">If the reference has no CID.</exception>
+    public ATBlob ToATBlob()
+    {
+        var link = Ref?.Link;
+        if (string.IsNullOrEmpty(link))
+        {
+            throw new InvalidOperationException("The blob reference has no CID.");
+        }
+
+        return new ATBlob(new ATCid(link!), MimeType ?? string.Empty, Size);
+    }
 }
 
 /// <summary>

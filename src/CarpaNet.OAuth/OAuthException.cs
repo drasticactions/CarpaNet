@@ -46,7 +46,8 @@ public class OAuthException : Exception
 }
 
 /// <summary>
-/// Exception thrown when an OAuth callback contains an error.
+/// Exception thrown when an OAuth callback contains an error or fails validation
+/// (for example an <c>iss</c> mismatch or an unverifiable token subject).
 /// </summary>
 public class OAuthCallbackException : OAuthException
 {
@@ -60,6 +61,15 @@ public class OAuthCallbackException : OAuthException
     /// </summary>
     public OAuthCallbackException(string errorCode, string? errorDescription, string? appState)
         : base(errorCode, errorDescription)
+    {
+        AppState = appState;
+    }
+
+    /// <summary>
+    /// Creates a new OAuth callback exception with an inner exception.
+    /// </summary>
+    public OAuthCallbackException(string errorCode, string? errorDescription, string? appState, Exception innerException)
+        : base(errorCode, errorDescription, innerException)
     {
         AppState = appState;
     }

@@ -7,6 +7,7 @@ namespace CarpaNet.OAuth;
 /// JSON serialization context for OAuth types.
 /// </summary>
 [JsonSerializable(typeof(OAuthAuthorizationServerMetadata))]
+[JsonSerializable(typeof(OAuthProtectedResourceMetadata))]
 [JsonSerializable(typeof(OAuthTokenResponse))]
 [JsonSerializable(typeof(OAuthClientMetadata))]
 [JsonSerializable(typeof(JsonWebKeySet))]
