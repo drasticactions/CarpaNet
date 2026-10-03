@@ -202,8 +202,8 @@ public static class JsonContextGenerator
 
     /// <summary>
     /// Generates a CreateTypeInfo factory method for a union interface with polymorphism options.
-    /// For open unions (isClosed=false), generates a custom JsonConverter that gracefully
-    /// returns null for unknown $type discriminator values instead of throwing.
+    /// For open unions (isClosed=false), generates a custom JsonConverter that reads unknown
+    /// $type discriminator values into the union's <c>Unknown_*</c> class instead of throwing.
     /// </summary>
     public static void GenerateJsonUnionTypeInfo(
         SourceBuilder sb,
@@ -253,7 +253,7 @@ public static class JsonContextGenerator
         }
         else
         {
-            // Open unions: generate a custom converter that returns null for unknown $type values
+            // Open unions: generate a custom converter that preserves unknown $type values
             GenerateOpenUnionConverter(sb, qualifiedTypeName, methodSuffix, refs, currentNsid, registry);
 
             sb.AppendLine($"private static global::System.Text.Json.Serialization.Metadata.JsonTypeInfo<global::{qualifiedTypeName}> Create_{methodSuffix}_TypeInfo(global::System.Text.Json.JsonSerializerOptions options)");
@@ -265,7 +265,11 @@ public static class JsonContextGenerator
     }
 
     /// <summary>
-    /// Generates a JsonConverter class for an open union interface that gracefully handles unknown $type values.
+    /// Generates a JsonConverter class for an open union interface.
+    /// Members with an unknown or missing $type are read into the generated <c>Unknown_*</c> class
+    /// (see <see cref="UnionGenerator.GetUnknownTypeName"/>) and written back verbatim, so that
+    /// round-tripping data written by newer clients is lossless. Known members are written with
+    /// their $type discriminator.
     /// </summary>
     private static void GenerateOpenUnionConverter(
         SourceBuilder sb,
@@ -275,6 +279,30 @@ public static class JsonContextGenerator
         string currentNsid,
         TypeRegistry registry)
     {
+        var unknownTypeName = UnionGenerator.GetUnknownTypeName(qualifiedTypeName);
+
+        // Resolve each member once: (C# type, $type discriminator). Duplicates would produce
+        // unreachable (compile-error) switch arms, so keep only the first occurrence.
+        var readMembers = new List<(string TypeName, string Discriminator)>();
+        var writeMembers = new List<(string TypeName, string Discriminator)>();
+        var seenTypes = new HashSet<string>();
+        var seenDiscriminators = new HashSet<string>();
+        foreach (var refString in refs)
+        {
+            var typeName = registry.ResolveToCSharpType(refString, currentNsid);
+            var discriminator = GetTypeDiscriminator(refString, currentNsid, registry);
+            if (seenDiscriminators.Add(discriminator))
+            {
+                readMembers.Add((typeName, discriminator));
+            }
+
+            // Type patterns are only valid for generated classes (which implement the interface)
+            if (registry.RefGeneratesClass(refString, currentNsid) && seenTypes.Add(typeName))
+            {
+                writeMembers.Add((typeName, discriminator));
+            }
+        }
+
         sb.AppendLine($"private sealed class Converter_{methodSuffix} : global::System.Text.Json.Serialization.JsonConverter<global::{qualifiedTypeName}>");
         sb.OpenBrace();
 
@@ -282,20 +310,24 @@ public static class JsonContextGenerator
         sb.AppendLine($"public override global::{qualifiedTypeName}? Read(ref global::System.Text.Json.Utf8JsonReader reader, global::System.Type typeToConvert, global::System.Text.Json.JsonSerializerOptions options)");
         sb.OpenBrace();
         sb.AppendLine("var element = global::System.Text.Json.JsonElement.ParseValue(ref reader);");
-        sb.AppendLine("if (!element.TryGetProperty(\"$type\", out var typeProp))");
-        sb.AppendLine("    return null;");
-        sb.AppendLine("var typeStr = typeProp.GetString();");
+        sb.AppendLine("string? typeStr = null;");
+        sb.AppendLine("if (element.ValueKind == global::System.Text.Json.JsonValueKind.Object");
+        sb.AppendLine("    && element.TryGetProperty(\"$type\", out var typeProp)");
+        sb.AppendLine("    && typeProp.ValueKind == global::System.Text.Json.JsonValueKind.String)");
+        sb.OpenBrace();
+        sb.AppendLine("typeStr = typeProp.GetString();");
+        sb.CloseBrace();
+        sb.AppendLine();
         sb.AppendLine("return typeStr switch");
         sb.OpenBrace();
 
-        foreach (var refString in refs)
+        foreach (var (typeName, discriminator) in readMembers)
         {
-            var typeName = registry.ResolveToCSharpType(refString, currentNsid);
-            var discriminator = GetTypeDiscriminator(refString, currentNsid, registry);
             sb.AppendLine($"\"{discriminator}\" => (global::{qualifiedTypeName}?)global::System.Text.Json.JsonSerializer.Deserialize(element, options.GetTypeInfo(typeof(global::{typeName}))),");
         }
 
-        sb.AppendLine("_ => null,");
+        // Unknown or missing $type: keep the whole value so it can be written back unchanged
+        sb.AppendLine($"_ => new global::{unknownTypeName}(typeStr ?? string.Empty, element),");
         sb.CloseBrace(withSemicolon: true);
         sb.CloseBrace();
         sb.AppendLine();
@@ -303,7 +335,40 @@ public static class JsonContextGenerator
         // Write method
         sb.AppendLine($"public override void Write(global::System.Text.Json.Utf8JsonWriter writer, global::{qualifiedTypeName} value, global::System.Text.Json.JsonSerializerOptions options)");
         sb.OpenBrace();
-        sb.AppendLine("global::System.Text.Json.JsonSerializer.Serialize(writer, value, options.GetTypeInfo(value.GetType()));");
+        sb.AppendLine($"if (value is global::{unknownTypeName} unknown)");
+        sb.OpenBrace();
+        sb.AppendLine("unknown.Raw.WriteTo(writer);");
+        sb.AppendLine("return;");
+        sb.CloseBrace();
+        sb.AppendLine();
+
+        // Known members: emit $type first, then the member's own properties
+        sb.AppendLine("string? typeId = value switch");
+        sb.OpenBrace();
+        foreach (var (typeName, discriminator) in writeMembers)
+        {
+            sb.AppendLine($"global::{typeName} => \"{discriminator}\",");
+        }
+        sb.AppendLine("_ => null,");
+        sb.CloseBrace(withSemicolon: true);
+        sb.AppendLine();
+        sb.AppendLine("var element = global::System.Text.Json.JsonSerializer.SerializeToElement(value, options.GetTypeInfo(value.GetType()));");
+        sb.AppendLine("if (typeId == null || element.ValueKind != global::System.Text.Json.JsonValueKind.Object)");
+        sb.OpenBrace();
+        sb.AppendLine("element.WriteTo(writer);");
+        sb.AppendLine("return;");
+        sb.CloseBrace();
+        sb.AppendLine();
+        sb.AppendLine("writer.WriteStartObject();");
+        sb.AppendLine("writer.WriteString(\"$type\", typeId);");
+        sb.AppendLine("foreach (var property in element.EnumerateObject())");
+        sb.OpenBrace();
+        sb.AppendLine("if (!property.NameEquals(\"$type\"))");
+        sb.OpenBrace();
+        sb.AppendLine("property.WriteTo(writer);");
+        sb.CloseBrace();
+        sb.CloseBrace();
+        sb.AppendLine("writer.WriteEndObject();");
         sb.CloseBrace();
 
         sb.CloseBrace();

@@ -17,7 +17,7 @@ namespace CarpaNet.Auth;
 /// Token provider that uses ATProtocol session tokens (createSession/refreshSession).
 /// Suitable for App Passwords and direct username/password authentication.
 /// </summary>
-public sealed class SessionTokenProvider : ITokenProvider, IDisposable
+public sealed class SessionTokenProvider : ITokenProvider, INotifySessionInvalidated, IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly bool _ownsHttpClient;
@@ -32,6 +32,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
     private string? _did;
     private string? _handle;
     private Uri? _pdsUrl;
+    private bool _invalidated;
     private bool _disposed;
 
     /// <inheritdoc/>
@@ -65,6 +66,14 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
 
     /// <inheritdoc/>
     public event EventHandler<TokenRefreshedEventArgs>? TokenRefreshed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Raised when <c>com.atproto.server.refreshSession</c> answers 400 or 401 (for example
+    /// <c>ExpiredToken</c> or <c>InvalidToken</c>). The access and refresh tokens are cleared first;
+    /// <see cref="CurrentDid"/> and <see cref="PdsUrl"/> are kept.
+    /// </remarks>
+    public event EventHandler<SessionInvalidatedEventArgs>? SessionInvalidated;
 
     /// <summary>
     /// Creates a new SessionTokenProvider with default settings.
@@ -182,6 +191,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
         _handle = handle;
         _pdsUrl = pdsUrl ?? throw new ArgumentNullException(nameof(pdsUrl));
         _accessExpiry = ParseJwtExpiry(accessJwt);
+        _invalidated = false;
     }
 
     /// <inheritdoc/>
@@ -214,27 +224,51 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
             throw new InvalidOperationException("No refresh token available. Call LoginAsync first.");
         }
 
+        // Remember the token this caller saw, so a refresh that another caller completed
+        // while this one waited for the lock is not repeated.
+        var staleAccessJwt = _accessJwt;
+        SessionInvalidatedEventArgs? invalidated = null;
+
         // Use lock to prevent concurrent refresh attempts
         await _refreshLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             // Double-check after acquiring lock
-            if (HasValidToken)
+            if (!string.Equals(_accessJwt, staleAccessJwt, StringComparison.Ordinal) && HasValidToken)
             {
-                _logger.LogDebug("Token still valid after lock, skipping refresh");
+                _logger.LogDebug("Token was refreshed by another caller, skipping refresh");
                 return;
             }
 
-            var url = XrpcHttpHandler.BuildUrl(_pdsUrl, "com.atproto.server.refreshSession");
+            var refreshJwt = _refreshJwt;
+            var pdsUrl = _pdsUrl;
+            if (string.IsNullOrEmpty(refreshJwt) || pdsUrl == null)
+            {
+                throw new InvalidOperationException("No refresh token available. Call LoginAsync first.");
+            }
+
+            var url = XrpcHttpHandler.BuildUrl(pdsUrl, "com.atproto.server.refreshSession");
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);
-            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _refreshJwt);
+            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", refreshJwt);
 
             var response = await _httpClient.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Session token refresh failed with HTTP {StatusCode}", (int)response.StatusCode);
-                await XrpcHttpHandler.ThrowForErrorResponseAsync(response, _logger, cancellationToken).ConfigureAwait(false);
+
+                // 400 and 401 mean the server rejected the refresh token; anything else is temporary.
+                var rejected = response.StatusCode == System.Net.HttpStatusCode.BadRequest
+                    || response.StatusCode == System.Net.HttpStatusCode.Unauthorized;
+                try
+                {
+                    await XrpcHttpHandler.ThrowForErrorResponseAsync(response, _logger, cancellationToken).ConfigureAwait(false);
+                }
+                catch (ATProtoException ex) when (rejected)
+                {
+                    invalidated = Invalidate(ex.ErrorCode ?? $"HTTP {(int)response.StatusCode}", ex);
+                    throw;
+                }
             }
 
 #if NET8_0_OR_GREATER
@@ -250,18 +284,40 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
                 throw new ATProtoException("Failed to parse refresh session response.");
             }
 
-            await UpdateSessionAsync(session, _pdsUrl).ConfigureAwait(false);
+            await UpdateSessionAsync(session, pdsUrl).ConfigureAwait(false);
             _logger.LogInformation("Session token refreshed for {Did}", session.Did);
         }
         finally
         {
             _refreshLock.Release();
+
+            if (invalidated != null)
+            {
+                SessionInvalidated?.Invoke(this, invalidated);
+            }
         }
     }
 
     /// <summary>
-    /// Clears the current session.
+    /// Drops the tokens after the server rejected the refresh token. Returns the event to raise,
+    /// or null when the event was already raised for this session.
     /// </summary>
+    private SessionInvalidatedEventArgs? Invalidate(string reason, Exception exception)
+    {
+        _accessJwt = null;
+        _refreshJwt = null;
+        _accessExpiry = default;
+
+        if (_invalidated)
+        {
+            return null;
+        }
+
+        _invalidated = true;
+        _logger.LogWarning("Session for {Did} was rejected by the server ({Reason})", _did, reason);
+        return new SessionInvalidatedEventArgs(_did, reason, exception);
+    }
+
     public void ClearSession()
     {
         _accessJwt = null;
@@ -314,6 +370,7 @@ public sealed class SessionTokenProvider : ITokenProvider, IDisposable
 
     private async Task UpdateSessionAsync(SessionResponse session, Uri pdsUrl)
     {
+        _invalidated = false;
         _accessJwt = session.AccessJwt;
         _refreshJwt = session.RefreshJwt;
         _did = session.Did;

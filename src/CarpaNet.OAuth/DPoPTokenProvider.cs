@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using CarpaNet.OAuth.Crypto;
 using CarpaNet.OAuth.Storage;
 using CarpaNet.Auth;
+using CarpaNet.Identity;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -16,11 +17,12 @@ namespace CarpaNet.OAuth;
 /// <summary>
 /// Token provider that uses OAuth 2.0 with DPoP for ATProtocol.
 /// </summary>
-public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
+public sealed class DPoPTokenProvider : ITokenProvider, INotifySessionInvalidated, IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly IOAuthSessionStore _sessionStore;
     private readonly AuthorizationServerDiscovery _discovery;
+    private readonly IdentityResolver? _identityResolver;
     private readonly DPoPNonceCache _nonceCache;
     private readonly TimeSpan _refreshBuffer;
     private readonly string? _clientId;
@@ -33,6 +35,7 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
     private DPoPKeyPair? _dpopKey;
     private TokenSet? _tokenSet;
     private OAuthAuthorizationServerMetadata? _serverMetadata;
+    private bool _invalidated;
     private bool _disposed;
 
     /// <inheritdoc/>
@@ -62,6 +65,14 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
     /// <inheritdoc/>
     public event EventHandler<TokenRefreshedEventArgs>? TokenRefreshed;
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Raised when the token endpoint rejects the refresh token (<c>invalid_grant</c>,
+    /// <c>invalid_token</c>, <c>unauthorized_client</c> or <c>invalid_client</c>). The token set is
+    /// dropped first; the stored session is left for the caller to delete.
+    /// </remarks>
+    public event EventHandler<SessionInvalidatedEventArgs>? SessionInvalidated;
+
     /// <summary>
     /// Creates a new DPoP token provider.
     /// </summary>
@@ -81,9 +92,11 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
         string? clientId = null,
         string? redirectUri = null,
         string? scope = null,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        IdentityResolver? identityResolver = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _identityResolver = identityResolver;
         _sessionStore = sessionStore ?? throw new ArgumentNullException(nameof(sessionStore));
         _discovery = discovery ?? new AuthorizationServerDiscovery(httpClient, loggerFactory: loggerFactory);
         _nonceCache = new DPoPNonceCache();
@@ -113,6 +126,7 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
 
         _sub = sub;
         _tokenSet = sessionData.TokenSet;
+        _invalidated = false;
         _dpopKey = DPoPKeyPair.Import(sessionData.DPoPKey);
 
         // Fetch server metadata
@@ -138,6 +152,7 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
 
         _sub = sub;
         _tokenSet = tokenSet;
+        _invalidated = false;
         _dpopKey = dpopKey;
         _serverMetadata = serverMetadata;
 
@@ -187,15 +202,33 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
         }
 
         _logger.LogDebug("Refreshing DPoP token for {Sub}", _sub);
+
+        // Remember the token this caller saw, so a refresh that another caller completed
+        // while this one waited for the lock is not repeated.
+        var staleAccessToken = _tokenSet.AccessToken;
+        SessionInvalidatedEventArgs? invalidated = null;
+
         await _refreshLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             // Double-check after acquiring lock
-            if (HasValidToken)
+            if (_tokenSet == null)
             {
-                _logger.LogDebug("Token still valid after lock, skipping refresh");
+                throw new InvalidOperationException("No refresh token available.");
+            }
+
+            if (!string.Equals(_tokenSet.AccessToken, staleAccessToken, StringComparison.Ordinal) && HasValidToken)
+            {
+                _logger.LogDebug("Token was refreshed by another caller, skipping refresh");
                 return;
             }
+
+            // Before refreshing, check that this authorization server is still the authority for
+            // the account (as the reference TypeScript client does). The refresh request stays the
+            // last async step, so its result can be stored right away.
+            var audience = _identityResolver != null
+                ? await VerifyIssuerAsync(_tokenSet.Sub.Length > 0 ? _tokenSet.Sub : _sub!, cancellationToken).ConfigureAwait(false)
+                : _tokenSet.Audience;
 
             var tokenEndpoint = _serverMetadata.TokenEndpoint;
 
@@ -220,7 +253,7 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
             var oldRefreshToken = _tokenSet.RefreshToken;
             _tokenSet = newTokenSet;
             _tokenSet.Issuer = _serverMetadata.Issuer;
-            _tokenSet.Audience = PdsUrl?.ToString() ?? string.Empty;
+            _tokenSet.Audience = audience;
 
             // Keep old refresh token if new one not provided
             if (string.IsNullOrEmpty(_tokenSet.RefreshToken))
@@ -247,9 +280,22 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
                 _sub ?? string.Empty,
                 null)); // OAuth doesn't return handle
         }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError("DPoP token refresh failed for {Sub}", _sub);
+            if (ex is OAuthException oauthError && IsRejectedRefresh(oauthError.ErrorCode))
+            {
+                invalidated = Invalidate(oauthError.ErrorCode, ex);
+            }
+            else if (ex is IssuerVerificationException { IsPermanent: true } issuerError)
+            {
+                invalidated = Invalidate(issuerError.Code, ex);
+            }
+
             throw new TokenRefreshException(
                 "refresh_failed",
                 ex.Message,
@@ -259,7 +305,119 @@ public sealed class DPoPTokenProvider : ITokenProvider, IDisposable
         finally
         {
             _refreshLock.Release();
+
+            if (invalidated != null)
+            {
+                SessionInvalidated?.Invoke(this, invalidated);
+            }
         }
+    }
+
+    /// <summary>
+    /// Resolves the account's DID document (bypassing the cache) and checks that its PDS still names
+    /// this session's issuer as an authorization server.
+    /// </summary>
+    /// <returns>The account's PDS URL, the audience for the refreshed tokens.</returns>
+    private async Task<string> VerifyIssuerAsync(string sub, CancellationToken cancellationToken)
+    {
+        var issuer = _serverMetadata!.Issuer;
+
+        DidDocument didDoc;
+        OAuthProtectedResourceMetadata resourceMetadata;
+        string pdsUrl;
+        try
+        {
+            didDoc = await _identityResolver!.ResolveDidAsync(sub, skipCache: true, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new IssuerVerificationException("identity_resolution_failed", $"Could not resolve '{sub}': {ex.Message}", isPermanent: false, ex);
+        }
+
+        if (!string.Equals(didDoc.Id, sub, StringComparison.Ordinal))
+        {
+            throw new IssuerVerificationException("invalid_sub", $"DID document id '{didDoc.Id}' does not match '{sub}'.", isPermanent: true);
+        }
+
+        var endpoint = didDoc.PdsEndpoint;
+        if (string.IsNullOrEmpty(endpoint) || !Uri.TryCreate(endpoint, UriKind.Absolute, out _))
+        {
+            throw new IssuerVerificationException("pds_not_found", $"No PDS endpoint in the DID document of '{sub}'.", isPermanent: true);
+        }
+
+        pdsUrl = endpoint!.TrimEnd('/');
+        try
+        {
+            resourceMetadata = await _discovery.GetProtectedResourceMetadataAsync(pdsUrl, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new IssuerVerificationException("resource_metadata_failed", $"Could not read the protected resource metadata of {pdsUrl}: {ex.Message}", isPermanent: false, ex);
+        }
+
+        if (resourceMetadata.AuthorizationServers != null)
+        {
+            foreach (var server in resourceMetadata.AuthorizationServers)
+            {
+                if (string.Equals(server, issuer, StringComparison.Ordinal))
+                {
+                    return pdsUrl;
+                }
+            }
+        }
+
+        // The account moved to a PDS with another authorization server, or the DID now points
+        // somewhere hostile. Either way these tokens must not be refreshed here.
+        _logger.LogWarning("PDS {PdsUrl} of {Sub} is no longer protected by issuer {Issuer}", pdsUrl, sub, issuer);
+        throw new IssuerVerificationException("issuer_mismatch", $"The PDS of '{sub}' ({pdsUrl}) is not protected by issuer '{issuer}'.", isPermanent: true);
+    }
+
+    private sealed class IssuerVerificationException : Exception
+    {
+        public IssuerVerificationException(string code, string message, bool isPermanent, Exception? inner = null)
+            : base(message, inner)
+        {
+            Code = code;
+            IsPermanent = isPermanent;
+        }
+
+        public string Code { get; }
+
+        public bool IsPermanent { get; }
+    }
+
+    private static bool IsRejectedRefresh(string errorCode)
+    {
+        return errorCode == "invalid_grant"
+            || errorCode == "invalid_token"
+            || errorCode == "unauthorized_client"
+            || errorCode == "invalid_client";
+    }
+
+    /// <summary>
+    /// Drops the token set after the server rejected the refresh token. Returns the event to raise,
+    /// or null when the event was already raised for this session.
+    /// </summary>
+    private SessionInvalidatedEventArgs? Invalidate(string reason, Exception exception)
+    {
+        _tokenSet = null;
+
+        if (_invalidated)
+        {
+            return null;
+        }
+
+        _invalidated = true;
+        _logger.LogWarning("OAuth session for {Sub} was rejected by the server ({Reason})", _sub, reason);
+        return new SessionInvalidatedEventArgs(_sub, reason, exception);
     }
 
     /// <summary>

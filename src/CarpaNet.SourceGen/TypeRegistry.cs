@@ -265,7 +265,7 @@ public sealed class TypeRegistry
             LexiconTypeKind.Any => "System.Text.Json.JsonElement",
             LexiconTypeKind.Object => typeInfo.FullCSharpTypeName,
             LexiconTypeKind.Record => typeInfo.FullCSharpTypeName,
-            LexiconTypeKind.Union => $"I{typeInfo.CSharpTypeName}", // Unions become interfaces
+            LexiconTypeKind.Union => $"{typeInfo.CSharpNamespace}.I{typeInfo.CSharpTypeName}", // Unions become interfaces (qualified: the ref may cross namespaces)
             // For array types, resolve the item type
             LexiconTypeKind.Array => ResolveArrayType(typeInfo, currentNsid),
             // For ref types, recursively resolve
@@ -401,7 +401,7 @@ public sealed class TypeRegistry
         var itemType = items.Type switch
         {
             "ref" when items.Ref != null => ResolveToCSharpType(items.Ref, typeInfo.Nsid),
-            "union" when items.Refs != null => $"I{typeInfo.CSharpTypeName}", // Generate interface name for union items
+            "union" when items.Refs != null => $"{typeInfo.CSharpNamespace}.I{typeInfo.CSharpTypeName}", // Interface for union items, qualified because the array def may be referenced from another namespace
             "string" => MapStringType(items),
             "integer" => "long",
             "boolean" => "bool",

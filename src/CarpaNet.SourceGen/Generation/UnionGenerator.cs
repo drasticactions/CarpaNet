@@ -16,7 +16,8 @@ public static class UnionGenerator
     /// <summary>
     /// Generates a union interface with JsonPolymorphic attributes.
     /// For open unions, no polymorphic attributes are emitted since a custom JsonConverter
-    /// in the generated JSON context handles unknown $type values gracefully.
+    /// in the generated JSON context handles unknown $type values; an <c>Unknown_*</c> class
+    /// (see <see cref="GetUnknownTypeName"/>) is emitted next to the interface to hold them.
     /// </summary>
     public static void GenerateUnionInterface(
         SourceBuilder sb,
@@ -48,6 +49,125 @@ public static class UnionGenerator
 
         sb.AppendLine($"public interface {interfaceName}");
         sb.OpenBrace();
+        sb.CloseBrace();
+
+        // Open unions with at least one known member get a catch-all class for members whose
+        // $type this code does not know, so they survive a read-modify-write round trip.
+        if (HasUnknownMemberType(def))
+        {
+            sb.AppendLine();
+            GenerateUnknownMemberClass(sb, interfaceName);
+        }
+    }
+
+    /// <summary>
+    /// Returns true when a union definition gets a generated <c>Unknown_*</c> member class:
+    /// open unions (no <c>closed: true</c>) that list at least one ref. Open unions without refs
+    /// are mapped to <c>JsonElement</c> directly and have no interface-based converter.
+    /// </summary>
+    public static bool HasUnknownMemberType(LexiconDefinition def)
+    {
+        return def.Closed != true && def.Refs != null && def.Refs.Count > 0;
+    }
+
+    /// <summary>
+    /// Gets the name of the class that holds unknown members of an open union.
+    /// </summary>
+    /// <remarks>
+    /// Naming rule: strip the leading <c>I</c> from the interface name and prefix <c>Unknown_</c>
+    /// (<c>IDefsPreferences</c> becomes <c>Unknown_DefsPreferences</c>). Lexicon-derived type names
+    /// are PascalCase with <c>_</c> and <c>-</c> removed, so they only ever contain an underscore as
+    /// their first character; a name with an underscore after <c>Unknown</c> cannot collide with them.
+    /// Accepts either a short or a namespace-qualified interface name and keeps the namespace.
+    /// </remarks>
+    public static string GetUnknownTypeName(string interfaceName)
+    {
+        var lastDot = interfaceName.LastIndexOf('.');
+        var ns = lastDot >= 0 ? interfaceName.Substring(0, lastDot + 1) : string.Empty;
+        var shortName = NsidHelper.StripEscapePrefix(lastDot >= 0 ? interfaceName.Substring(lastDot + 1) : interfaceName);
+
+        if (shortName.Length > 1 && shortName[0] == 'I')
+        {
+            shortName = shortName.Substring(1);
+        }
+
+        return $"{ns}Unknown_{shortName}";
+    }
+
+    /// <summary>
+    /// Generates the sealed class that represents an open-union member with an unrecognized
+    /// (or missing) <c>$type</c>. It keeps the raw JSON so that it can be written back verbatim.
+    /// </summary>
+    private static void GenerateUnknownMemberClass(SourceBuilder sb, string interfaceName)
+    {
+        var className = GetUnknownTypeName(interfaceName);
+
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine($"/// A member of the open union <see cref=\"{interfaceName}\"/> whose <c>$type</c> is not known to this generated code.");
+        sb.AppendLine("/// The original data is kept in <see cref=\"Raw\"/> and is written back unchanged on serialization,");
+        sb.AppendLine("/// so data from newer lexicon versions is not lost in a read-modify-write cycle.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine($"public sealed class {className} : {interfaceName}");
+        sb.OpenBrace();
+
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine($"/// Initializes a new instance of the <see cref=\"{className}\"/> class.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("/// <param name=\"type\">The <c>$type</c> value of the member, or an empty string if it had none.</param>");
+        sb.AppendLine("/// <param name=\"raw\">The complete JSON value of the member, including <c>$type</c>. It is cloned, so it can outlive its source document.</param>");
+        sb.AppendLine("/// <param name=\"rawCbor\">The original DAG-CBOR encoding of the member, when it was read from CBOR; otherwise <see langword=\"null\"/>.</param>");
+        sb.AppendLine("/// <exception cref=\"System.ArgumentException\"><paramref name=\"raw\"/> is an undefined (default) element.</exception>");
+        sb.AppendLine($"public {className}(string type, System.Text.Json.JsonElement raw, byte[]? rawCbor = null)");
+        sb.OpenBrace();
+        sb.AppendLine("if (raw.ValueKind == System.Text.Json.JsonValueKind.Undefined)");
+        sb.OpenBrace();
+        sb.AppendLine("throw new System.ArgumentException(\"The raw JSON value must not be undefined.\", nameof(raw));");
+        sb.CloseBrace();
+        sb.AppendLine();
+        sb.AppendLine("Type = type ?? string.Empty;");
+        sb.AppendLine("Raw = raw.Clone();");
+        sb.AppendLine("RawCbor = rawCbor;");
+        sb.CloseBrace();
+        sb.AppendLine();
+
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// Gets the <c>$type</c> value of the member, or an empty string if the member had no <c>$type</c>.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("public string Type { get; }");
+        sb.AppendLine();
+
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// Gets the complete JSON value of the member, including <c>$type</c>.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("public System.Text.Json.JsonElement Raw { get; }");
+        sb.AppendLine();
+
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// Gets the original DAG-CBOR encoding of the member when it was read from CBOR, or <see langword=\"null\"/>.");
+        sb.AppendLine("/// When set, CBOR serialization writes these bytes back instead of converting <see cref=\"Raw\"/>.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("public byte[]? RawCbor { get; }");
+        sb.AppendLine();
+
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// Returns the raw JSON value of the member.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("public System.Text.Json.JsonElement ToJson() => Raw;");
+        sb.AppendLine();
+
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine($"/// Creates an instance from a JSON value, reading <c>$type</c> from it when present.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine($"public static {className} FromJson(System.Text.Json.JsonElement element)");
+        sb.OpenBrace();
+        sb.AppendLine("var type = element.ValueKind == System.Text.Json.JsonValueKind.Object");
+        sb.AppendLine("    && element.TryGetProperty(\"$type\", out var typeProp)");
+        sb.AppendLine("    && typeProp.ValueKind == System.Text.Json.JsonValueKind.String");
+        sb.AppendLine("    ? typeProp.GetString() ?? string.Empty");
+        sb.AppendLine("    : string.Empty;");
+        sb.AppendLine($"return new {className}(type, element);");
+        sb.CloseBrace();
+
         sb.CloseBrace();
     }
 

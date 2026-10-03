@@ -30,3 +30,17 @@ var authUrl = await oauthClient.AuthorizeAsync(handle);
 var session = await oauthClient.CallbackAsync(callbackUrl);
 // session implements IATProtoClient
 ```
+
+`CallbackAsync` validates the `iss` callback parameter (RFC 9207) and the token `sub`. The session's PDS URL is taken from the DID document of `sub`, also when authorization started from an entryway URL.
+
+### Scopes
+
+Use `ScopeSet` (namespace `CarpaNet.OAuth.Scopes`) to build the scope string with the atproto permission syntax:
+
+```csharp
+config.SetScope(new ScopeSet()
+    .AddAtproto()
+    .AddRepo("app.bsky.feed.post", RepoActions.Create)
+    .AddBlob("image/*"));
+// "atproto repo:app.bsky.feed.post?action=create blob:image/*"
+```

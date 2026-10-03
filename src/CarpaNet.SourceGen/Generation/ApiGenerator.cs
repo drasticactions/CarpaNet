@@ -21,7 +21,8 @@ public static class ApiGenerator
         string className,
         LexiconDefinition def,
         string currentNsid,
-        TypeRegistry registry)
+        TypeRegistry registry,
+        bool emitValidationAttributes = true)
     {
         if (def.Parameters == null || def.Parameters.Properties == null)
         {
@@ -48,7 +49,8 @@ public static class ApiGenerator
                 currentNsid,
                 registry,
                 requiredProps,
-                new List<string>());
+                new List<string>(),
+                emitValidationAttributes: emitValidationAttributes);
         }
 
         // Generate ToQueryParameters method for converting to query parameters
@@ -91,6 +93,14 @@ public static class ApiGenerator
                 if (prop.Value.Items?.Type == "string")
                 {
                     sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", item));");
+                }
+                else if (prop.Value.Items?.Type == "integer")
+                {
+                    sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", item.ToString(System.Globalization.CultureInfo.InvariantCulture)));");
+                }
+                else if (prop.Value.Items?.Type == "boolean")
+                {
+                    sb.AppendLine($"list.Add(new System.Collections.Generic.KeyValuePair<string, string>(\"{jsonName}\", item ? \"true\" : \"false\"));");
                 }
                 else
                 {
@@ -213,7 +223,8 @@ public static class ApiGenerator
         string className,
         LexiconIO input,
         string currentNsid,
-        TypeRegistry registry)
+        TypeRegistry registry,
+        bool emitValidationAttributes = true)
     {
         if (input.Schema == null)
         {
@@ -253,7 +264,8 @@ public static class ApiGenerator
                     currentNsid,
                     registry,
                     requiredProps,
-                    nullableProps);
+                    nullableProps,
+                    emitValidationAttributes: emitValidationAttributes);
             }
         }
 
@@ -268,7 +280,8 @@ public static class ApiGenerator
         string className,
         LexiconIO output,
         string currentNsid,
-        TypeRegistry registry)
+        TypeRegistry registry,
+        bool emitValidationAttributes = true)
     {
         if (output.Schema == null)
         {
@@ -308,7 +321,8 @@ public static class ApiGenerator
                     currentNsid,
                     registry,
                     requiredProps,
-                    nullableProps);
+                    nullableProps,
+                    emitValidationAttributes: emitValidationAttributes);
             }
         }
 
@@ -440,7 +454,84 @@ public static class ApiGenerator
     }
 
     /// <summary>
+    /// The JSON media type used by XRPC for structured bodies.
+    /// </summary>
+    private const string JsonEncoding = "application/json";
+
+    /// <summary>
+    /// Returns true if an XRPC encoding is <c>application/json</c> (ignoring case and media type parameters).
+    /// </summary>
+    public static bool IsJsonEncoding(string? encoding)
+    {
+        if (string.IsNullOrWhiteSpace(encoding))
+        {
+            return false;
+        }
+
+        var mediaType = encoding!;
+        var semicolon = mediaType.IndexOf(';');
+        if (semicolon >= 0)
+        {
+            mediaType = mediaType.Substring(0, semicolon);
+        }
+
+        return string.Equals(mediaType.Trim(), JsonEncoding, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Returns true if a procedure takes a raw (non-JSON) request body: its input declares an encoding
+    /// that is not <c>application/json</c>, or declares an encoding without a schema
+    /// (e.g. <c>com.atproto.repo.uploadBlob</c> with <c>*/*</c>).
+    /// </summary>
+    public static bool HasBinaryInput(LexiconDefinition def)
+    {
+        var input = def.Input;
+        if (input == null || string.IsNullOrWhiteSpace(input.Encoding))
+        {
+            return false;
+        }
+
+        return input.Schema == null || !IsJsonEncoding(input.Encoding);
+    }
+
+    /// <summary>
+    /// Returns true if a query declares an output encoding other than <c>application/json</c>
+    /// (e.g. <c>com.atproto.sync.getBlob</c> with <c>*/*</c>, or a CAR file).
+    /// </summary>
+    public static bool HasBinaryOutput(LexiconDefinition def)
+    {
+        var output = def.Output;
+        return output != null
+            && !string.IsNullOrWhiteSpace(output.Encoding)
+            && !IsJsonEncoding(output.Encoding);
+    }
+
+    /// <summary>
+    /// Gets the default Content-Type for a binary input: the declared encoding when it is a concrete
+    /// media type, otherwise (wildcards such as <c>*/*</c> or <c>video/*</c>) <c>application/octet-stream</c>.
+    /// </summary>
+    private static string GetDefaultContentType(LexiconIO input)
+    {
+        var encoding = input.Encoding?.Trim();
+        if (string.IsNullOrEmpty(encoding) || encoding!.IndexOf('*') >= 0 || encoding.IndexOf('"') >= 0 || encoding.IndexOf('\\') >= 0)
+        {
+            return "application/octet-stream";
+        }
+
+        return encoding;
+    }
+
+    /// <summary>
+    /// Returns true if the definition declares at least one query parameter.
+    /// </summary>
+    private static bool HasParameters(LexiconDefinition def)
+    {
+        return def.Parameters?.Properties != null && def.Parameters.Properties.Count > 0;
+    }
+
+    /// <summary>
     /// Generates extension method for a query.
+    /// Queries with a non-JSON output encoding return the raw response body as <c>byte[]</c>.
     /// </summary>
     public static void GenerateQueryExtension(
         SourceBuilder sb,
@@ -450,12 +541,18 @@ public static class ApiGenerator
         string currentNamespace,
         TypeRegistry registry)
     {
-        var hasParameters = def.Parameters?.Properties != null && def.Parameters.Properties.Count > 0;
+        var hasParameters = HasParameters(def);
         var hasOutput = def.Output?.Schema != null;
+        var isBinaryOutput = HasBinaryOutput(def);
         var proxyServiceDid = GetProxyServiceDid(currentNsid);
         var outputType = hasOutput ? ResolveOutputType(def, currentNsid, currentNamespace, className, registry) : "object";
         // Use full namespace path in method name to avoid collisions
         var methodName = $"{currentNamespace.Replace(".", "")}{className}Async";
+
+        if (isBinaryOutput)
+        {
+            outputType = "byte[]";
+        }
 
         sb.WriteSummary(def.Description);
         sb.AppendLine($"public static async System.Threading.Tasks.Task<{outputType}> {methodName}(");
@@ -472,7 +569,19 @@ public static class ApiGenerator
 
         sb.OpenBrace();
 
-        if (proxyServiceDid != null)
+        if (isBinaryOutput)
+        {
+            // Non-JSON output (blob, CAR file, ...): return the raw response body
+            sb.AppendLine("return await global::CarpaNet.ATProtoClientXrpcExtensions.GetBytesAsync(");
+            sb.Indent();
+            sb.AppendLine("client,");
+            sb.AppendLine($"\"{currentNsid}\",");
+            sb.AppendLine($"{proxyServiceDid ?? "null"},");
+            sb.AppendLine(hasParameters ? "parameters?.ToQueryParameters()," : "null,");
+            sb.AppendLine("cancellationToken);");
+            sb.Unindent();
+        }
+        else if (proxyServiceDid != null)
         {
             // Use the proxy overload for services that require proxying
             sb.AppendLine($"return await client.GetAsync<{outputType}>(");
@@ -498,6 +607,11 @@ public static class ApiGenerator
 
     /// <summary>
     /// Generates extension method for a procedure.
+    /// <list type="bullet">
+    /// <item>Binary input (see <see cref="HasBinaryInput"/>): takes a <c>Stream</c> body and content type and calls <c>PostBinaryAsync</c>.</item>
+    /// <item>JSON (or no) input with query parameters: adds a <c>parameters</c> argument and calls <c>PostWithParametersAsync</c>.</item>
+    /// <item>Otherwise: JSON input via <c>IATProtoClient.PostAsync</c>.</item>
+    /// </list>
     /// </summary>
     public static void GenerateProcedureExtension(
         SourceBuilder sb,
@@ -507,22 +621,35 @@ public static class ApiGenerator
         string currentNamespace,
         TypeRegistry registry)
     {
-        var hasInput = def.Input?.Schema != null;
+        var isBinaryInput = HasBinaryInput(def);
+        var hasInput = !isBinaryInput && def.Input?.Schema != null;
         var hasOutput = def.Output?.Schema != null;
+        var hasParameters = HasParameters(def);
         var proxyServiceDid = GetProxyServiceDid(currentNsid);
         // Use full namespace path in method name to avoid collisions
         var methodName = $"{currentNamespace.Replace(".", "")}{className}Async";
         var returnType = hasOutput ? ResolveOutputType(def, currentNsid, currentNamespace, className, registry) : "object";
         var inputType = hasInput ? ResolveInputType(def, currentNsid, currentNamespace, className, registry) : "object";
+        var parametersType = $"{currentNamespace}.{className}Parameters";
 
         sb.WriteSummary(def.Description);
         sb.AppendLine($"public static async System.Threading.Tasks.Task<{returnType}> {methodName}(");
         sb.Indent();
         sb.AppendLine("this CarpaNet.IATProtoClient client,");
 
-        if (hasInput)
+        if (isBinaryInput)
+        {
+            sb.AppendLine("System.IO.Stream body,");
+            sb.AppendLine($"string contentType = \"{GetDefaultContentType(def.Input!)}\",");
+        }
+        else if (hasInput)
         {
             sb.AppendLine($"{inputType} input,");
+        }
+
+        if (hasParameters)
+        {
+            sb.AppendLine($"{parametersType}? parameters = null,");
         }
 
         sb.AppendLine("System.Threading.CancellationToken cancellationToken = default)");
@@ -530,7 +657,34 @@ public static class ApiGenerator
 
         sb.OpenBrace();
 
-        if (proxyServiceDid != null)
+        if (isBinaryInput)
+        {
+            // Raw request body (blob, video, ...) sent with the given Content-Type
+            sb.AppendLine($"return await global::CarpaNet.ATProtoClientXrpcExtensions.PostBinaryAsync<{returnType}>(");
+            sb.Indent();
+            sb.AppendLine("client,");
+            sb.AppendLine($"\"{currentNsid}\",");
+            sb.AppendLine($"{proxyServiceDid ?? "null"},");
+            sb.AppendLine(hasParameters ? "parameters?.ToQueryParameters()," : "null,");
+            sb.AppendLine("body,");
+            sb.AppendLine("contentType,");
+            sb.AppendLine("cancellationToken);");
+            sb.Unindent();
+        }
+        else if (hasParameters)
+        {
+            // JSON body plus query string parameters
+            sb.AppendLine($"return await global::CarpaNet.ATProtoClientXrpcExtensions.PostWithParametersAsync<{inputType}, {returnType}>(");
+            sb.Indent();
+            sb.AppendLine("client,");
+            sb.AppendLine($"\"{currentNsid}\",");
+            sb.AppendLine($"{proxyServiceDid ?? "null"},");
+            sb.AppendLine("parameters?.ToQueryParameters(),");
+            sb.AppendLine(hasInput ? "input," : "null,");
+            sb.AppendLine("cancellationToken);");
+            sb.Unindent();
+        }
+        else if (proxyServiceDid != null)
         {
             // Use the proxy overload for services that require proxying
             sb.AppendLine($"return await client.PostAsync<{inputType}, {returnType}>(");

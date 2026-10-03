@@ -29,6 +29,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Generator options (read by LexiconGenerator as build_property.<name>) -->
+    <CompilerVisibleProperty Include="CarpaNet_RootNamespace" />
+    <CompilerVisibleProperty Include="CarpaNet_EmitValidationAttributes" />
+    <CompilerVisibleProperty Include="CarpaNet_CborContextName" />
+    <CompilerVisibleProperty Include="CarpaNet_JsonContextName" />
+    <!-- Legacy spellings, still honored when the CarpaNet_* name above is not set -->
     <CompilerVisibleProperty Include="CarpaNet_SourceGen_RootNamespace" />
     <CompilerVisibleProperty Include="CarpaNet_SourceGen_EmitValidationAttributes" />
     <CompilerVisibleProperty Include="CarpaNet_SourceGen_CborContextName" />

@@ -25,7 +25,8 @@ public static class ObjectGenerator
         TypeRegistry registry,
         bool isRecord = false,
         string? recordType = null,
-        string? typeId = null)
+        string? typeId = null,
+        bool emitValidationAttributes = true)
     {
         var requiredProps = def.Required ?? new List<string>();
         var nullableProps = def.Nullable ?? new List<string>();
@@ -63,7 +64,7 @@ public static class ObjectGenerator
 
         foreach (var prop in properties)
         {
-            GenerateProperty(sb, className, prop.Key, prop.Value, currentNsid, registry, requiredProps, nullableProps, isRecord);
+            GenerateProperty(sb, className, prop.Key, prop.Value, currentNsid, registry, requiredProps, nullableProps, isRecord, emitValidationAttributes);
         }
 
         sb.CloseBrace();
@@ -112,7 +113,8 @@ public static class ObjectGenerator
         TypeRegistry registry,
         List<string> requiredProps,
         List<string> nullableProps,
-        bool isRecord = false)
+        bool isRecord = false,
+        bool emitValidationAttributes = true)
     {
         var isRequired = requiredProps.Contains(propertyName) || def.IsRequired;
         var isNullable = nullableProps.Contains(propertyName) || !isRequired;
@@ -140,8 +142,11 @@ public static class ObjectGenerator
         // JSON property name attribute
         sb.WriteAttribute($"System.Text.Json.Serialization.JsonPropertyName(\"{propertyName}\")");
 
-        // Add validation attributes
-        WriteValidationAttributes(sb, def);
+        // Add validation attributes (opt-out via CarpaNet_EmitValidationAttributes=false)
+        if (emitValidationAttributes)
+        {
+            WriteValidationAttributes(sb, def);
+        }
 
         // Get the C# type
         var typeName = GetPropertyType(def, currentNsid, registry, className, propertyName);

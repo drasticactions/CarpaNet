@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text.Json;
 using CarpaNet.Identity;
 using CarpaNet.OAuth.Crypto;
+using CarpaNet.OAuth.Scopes;
 using CarpaNet.OAuth.Storage;
 using Microsoft.Extensions.Logging;
 
@@ -25,9 +26,32 @@ public sealed class OAuthClientConfig
     public string RedirectUri { get; set; } = string.Empty;
 
     /// <summary>
-    /// The scope to request (default: "atproto").
+    /// The scope to request (default: "atproto"), as a space-separated string.
+    /// Use <see cref="SetScope(ScopeSet)"/> to build it from a <see cref="ScopeSet"/>.
     /// </summary>
     public string Scope { get; set; } = "atproto";
+
+    /// <summary>
+    /// Sets <see cref="Scope"/> from a <see cref="ScopeSet"/>.
+    /// </summary>
+    /// <param name="scopes">The scopes to request. Must contain <c>atproto</c>.</param>
+    /// <returns>This configuration, for chaining.</returns>
+    /// <exception cref="ArgumentException">The set does not contain the <c>atproto</c> scope.</exception>
+    public OAuthClientConfig SetScope(ScopeSet scopes)
+    {
+        if (scopes == null)
+        {
+            throw new ArgumentNullException(nameof(scopes));
+        }
+
+        if (!scopes.Contains(AtprotoScope.Atproto))
+        {
+            throw new ArgumentException("atproto OAuth requires the 'atproto' scope.", nameof(scopes));
+        }
+
+        Scope = scopes.ToString();
+        return this;
+    }
 
     /// <summary>
     /// The HttpClient to use for requests. If not provided, a new one will be created.

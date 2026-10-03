@@ -185,8 +185,30 @@ public static class CborContextGenerator
     }
 
     /// <summary>
+    /// Marker added to the generated-types set when a union type info that reads in place is emitted,
+    /// signalling that the shared <see cref="UnionHelperClassName"/> helper must be generated.
+    /// </summary>
+    public const string UnionHelperMarker = "<UnionCborHelper>";
+
+    /// <summary>
+    /// Name of the internal helper class emitted into the CBOR context namespace for data unions.
+    /// </summary>
+    public const string UnionHelperClassName = "UnionCborHelper";
+
+    /// <summary>
     /// Generates a CborUnionTypeInfo subclass for a union type.
     /// </summary>
+    /// <param name="dispatchInPlace">
+    /// When true (unions inside data), members with a known <c>$type</c> are read directly from the caller's
+    /// reader, so the reader stays positioned inside its enclosing map or array and following values can
+    /// still be read. Subscription message unions pass false: their bodies carry no <c>$type</c> (the frame
+    /// header does), so they keep the base class behavior.
+    /// </param>
+    /// <param name="preserveUnknown">
+    /// When true (open unions in data, requires <paramref name="dispatchInPlace"/>), any non-null value
+    /// that is not a member with a known <c>$type</c> (unknown or missing <c>$type</c>) is read into the
+    /// union's <c>Unknown_*</c> class with its raw DAG-CBOR bytes, and written back unchanged.
+    /// </param>
     public static void GenerateCborUnionTypeInfo(
         SourceBuilder sb,
         string qualifiedTypeName,
@@ -195,7 +217,9 @@ public static class CborContextGenerator
         string currentNsid,
         TypeRegistry registry,
         GeneratorOptions options,
-        HashSet<string>? generatedTypes = null)
+        HashSet<string>? generatedTypes = null,
+        bool dispatchInPlace = false,
+        bool preserveUnknown = false)
     {
         generatedTypes ??= new HashSet<string>();
 
@@ -230,6 +254,247 @@ public static class CborContextGenerator
         sb.AppendLine();
 
         sb.AppendLine("protected override System.Collections.Generic.IReadOnlyDictionary<string, CarpaNet.Cbor.ICborTypeInfo> DerivedTypes => _derivedTypes;");
+
+        if (dispatchInPlace && refs.Count > 0)
+        {
+            generatedTypes.Add(UnionHelperMarker);
+            var unknownType = preserveUnknown
+                ? ResolveToGlobalType(UnionGenerator.GetUnknownTypeName(qualifiedTypeName))
+                : null;
+
+            sb.AppendLine();
+            sb.WriteSummary(unknownType != null
+                ? "Reads a union member in place; members with an unknown $type are kept as raw DAG-CBOR."
+                : "Reads a union member in place, so the reader stays positioned within its enclosing container.");
+            sb.AppendLine($"public override {globalType}? Read(ref CarpaNet.Cbor.DagCborReader reader)");
+            sb.OpenBrace();
+            sb.AppendLine("var state = reader.PeekState();");
+            sb.AppendLine("string? discriminator = null;");
+            sb.AppendLine("if (state == System.Formats.Cbor.CborReaderState.StartMap)");
+            sb.OpenBrace();
+            sb.AppendLine($"discriminator = {UnionHelperClassName}.PeekTypeDiscriminator(reader.GetRemainingData());");
+            sb.AppendLine("if (discriminator != null && _derivedTypes.TryGetValue(discriminator, out var typeInfo))");
+            sb.OpenBrace();
+            sb.AppendLine($"return ({globalType}?)typeInfo.ReadObject(ref reader);");
+            sb.CloseBrace();
+            sb.CloseBrace();
+            sb.AppendLine();
+
+            if (unknownType != null)
+            {
+                // Open union: anything other than null or a known member is kept verbatim
+                sb.AppendLine("if (state != System.Formats.Cbor.CborReaderState.Null)");
+                sb.OpenBrace();
+                sb.AppendLine($"var rawCbor = {UnionHelperClassName}.ReadRawValue(ref reader);");
+                sb.AppendLine($"return new {unknownType}(discriminator ?? string.Empty, {UnionHelperClassName}.ToJson(rawCbor), rawCbor);");
+                sb.CloseBrace();
+                sb.AppendLine();
+            }
+
+            sb.AppendLine("return base.Read(ref reader);");
+            sb.CloseBrace();
+
+            sb.AppendLine();
+            sb.WriteSummary(unknownType != null
+                ? "Writes a union member with its $type; unknown members are written back from their raw data."
+                : "Writes a union member with its $type discriminator.");
+            sb.AppendLine($"public override void Write(ref CarpaNet.Cbor.DagCborWriter writer, {globalType}? value)");
+            sb.OpenBrace();
+
+            if (unknownType != null)
+            {
+                sb.AppendLine($"if (value is {unknownType} unknown)");
+                sb.OpenBrace();
+                sb.AppendLine($"{UnionHelperClassName}.WriteRawValue(ref writer, unknown.Raw, unknown.RawCbor);");
+                sb.AppendLine("return;");
+                sb.CloseBrace();
+                sb.AppendLine();
+            }
+
+            // Non-record members do not write $type themselves, but union members must carry it
+            sb.AppendLine("if (value != null)");
+            sb.OpenBrace();
+            sb.AppendLine("var runtimeType = value.GetType();");
+            sb.AppendLine("foreach (var kvp in _derivedTypes)");
+            sb.OpenBrace();
+            sb.AppendLine("if (kvp.Value.TargetType == runtimeType && kvp.Value.TypeDiscriminator == null)");
+            sb.OpenBrace();
+            sb.AppendLine($"{UnionHelperClassName}.WriteWithTypeDiscriminator(ref writer, kvp.Key, kvp.Value, value);");
+            sb.AppendLine("return;");
+            sb.CloseBrace();
+            sb.CloseBrace();
+            sb.CloseBrace();
+            sb.AppendLine();
+            sb.AppendLine("base.Write(ref writer, value);");
+            sb.CloseBrace();
+        }
+
+        sb.CloseBrace();
+        sb.AppendLine();
+    }
+
+    /// <summary>
+    /// Generates the internal helper used by data union type infos to peek <c>$type</c>,
+    /// add <c>$type</c> to members that do not write it, capture raw DAG-CBOR values,
+    /// and copy them back out unchanged.
+    /// </summary>
+    public static void GenerateUnionHelper(SourceBuilder sb)
+    {
+        sb.WriteSummary("Helpers for reading union members in place and preserving unknown open-union members in DAG-CBOR.");
+        sb.AppendLine($"internal static class {UnionHelperClassName}");
+        sb.OpenBrace();
+
+        // PeekTypeDiscriminator
+        sb.WriteSummary("Returns the $type text value of the CBOR map at the start of the data, or null if it has none.");
+        sb.AppendLine("public static string? PeekTypeDiscriminator(System.ReadOnlyMemory<byte> data)");
+        sb.OpenBrace();
+        sb.AppendLine("var reader = new CarpaNet.Cbor.DagCborReader(data);");
+        sb.AppendLine("var count = reader.ReadStartMap();");
+        sb.AppendLine("var remaining = count ?? int.MaxValue;");
+        sb.AppendLine("while (remaining > 0 && reader.PeekState() != System.Formats.Cbor.CborReaderState.EndMap)");
+        sb.OpenBrace();
+        sb.AppendLine("if (reader.PeekState() != System.Formats.Cbor.CborReaderState.TextString)");
+        sb.OpenBrace();
+        sb.AppendLine("return null;");
+        sb.CloseBrace();
+        sb.AppendLine();
+        sb.AppendLine("var key = reader.ReadTextString();");
+        sb.AppendLine("if (key == \"$type\")");
+        sb.OpenBrace();
+        sb.AppendLine("return reader.PeekState() == System.Formats.Cbor.CborReaderState.TextString ? reader.ReadTextString() : null;");
+        sb.CloseBrace();
+        sb.AppendLine();
+        sb.AppendLine("reader.SkipValue();");
+        sb.AppendLine("remaining--;");
+        sb.CloseBrace();
+        sb.AppendLine();
+        sb.AppendLine("return null;");
+        sb.CloseBrace();
+        sb.AppendLine();
+
+        // ReadRawValue
+        sb.WriteSummary("Reads the next complete value and returns its encoded bytes.");
+        sb.AppendLine("public static byte[] ReadRawValue(ref CarpaNet.Cbor.DagCborReader reader)");
+        sb.OpenBrace();
+        sb.AppendLine("var data = reader.GetRemainingData();");
+        sb.AppendLine("var start = reader.BytesRead;");
+        sb.AppendLine("reader.SkipValue();");
+        sb.AppendLine("return data.Slice(0, reader.BytesRead - start).ToArray();");
+        sb.CloseBrace();
+        sb.AppendLine();
+
+        // ToJson
+        sb.WriteSummary("Converts an encoded CBOR value to JSON (CID links and byte strings become strings).");
+        sb.AppendLine("public static System.Text.Json.JsonElement ToJson(byte[] rawCbor)");
+        sb.OpenBrace();
+        sb.AppendLine("var reader = new CarpaNet.Cbor.DagCborReader(rawCbor);");
+        sb.AppendLine("return new CarpaNet.Cbor.Converters.JsonElementCborConverter().ReadTyped(ref reader);");
+        sb.CloseBrace();
+        sb.AppendLine();
+
+        // WriteRawValue
+        sb.WriteSummary("Writes an unknown member: its original CBOR bytes when available, otherwise its JSON value converted to CBOR.");
+        sb.AppendLine("public static void WriteRawValue(ref CarpaNet.Cbor.DagCborWriter writer, System.Text.Json.JsonElement raw, byte[]? rawCbor)");
+        sb.OpenBrace();
+        sb.AppendLine("if (rawCbor != null)");
+        sb.OpenBrace();
+        sb.AppendLine("var reader = new CarpaNet.Cbor.DagCborReader(rawCbor);");
+        sb.AppendLine("CopyValue(ref reader, ref writer);");
+        sb.AppendLine("return;");
+        sb.CloseBrace();
+        sb.AppendLine();
+        sb.AppendLine("new CarpaNet.Cbor.Converters.JsonElementCborConverter().WriteTyped(ref writer, raw);");
+        sb.CloseBrace();
+        sb.AppendLine();
+
+        // WriteWithTypeDiscriminator
+        sb.WriteSummary("Writes an object through its type info, adding a leading $type entry to the map.");
+        sb.AppendLine("public static void WriteWithTypeDiscriminator(ref CarpaNet.Cbor.DagCborWriter writer, string discriminator, CarpaNet.Cbor.ICborTypeInfo typeInfo, object value)");
+        sb.OpenBrace();
+        sb.AppendLine("var temp = new CarpaNet.Cbor.DagCborWriter();");
+        sb.AppendLine("typeInfo.WriteObject(ref temp, value);");
+        sb.AppendLine("var reader = new CarpaNet.Cbor.DagCborReader(temp.Encode());");
+        sb.AppendLine("if (reader.PeekState() != System.Formats.Cbor.CborReaderState.StartMap)");
+        sb.OpenBrace();
+        sb.AppendLine("CopyValue(ref reader, ref writer);");
+        sb.AppendLine("return;");
+        sb.CloseBrace();
+        sb.AppendLine();
+        sb.AppendLine("var count = reader.ReadStartMap();");
+        sb.AppendLine("writer.WriteStartMap(count + 1);");
+        sb.AppendLine("writer.WriteTextString(\"$type\");");
+        sb.AppendLine("writer.WriteTextString(discriminator);");
+        sb.AppendLine("while (reader.PeekState() != System.Formats.Cbor.CborReaderState.EndMap)");
+        sb.OpenBrace();
+        sb.AppendLine("CopyValue(ref reader, ref writer); // key");
+        sb.AppendLine("CopyValue(ref reader, ref writer); // value");
+        sb.CloseBrace();
+        sb.AppendLine("reader.ReadEndMap();");
+        sb.AppendLine("writer.WriteEndMap();");
+        sb.CloseBrace();
+        sb.AppendLine();
+
+        // CopyValue
+        sb.WriteSummary("Copies one CBOR value (recursively) from the reader to the writer.");
+        sb.AppendLine("private static void CopyValue(ref CarpaNet.Cbor.DagCborReader reader, ref CarpaNet.Cbor.DagCborWriter writer)");
+        sb.OpenBrace();
+        sb.AppendLine("switch (reader.PeekState())");
+        sb.OpenBrace();
+        sb.AppendLine("case System.Formats.Cbor.CborReaderState.UnsignedInteger:");
+        sb.AppendLine("    writer.WriteUInt64(reader.ReadUInt64());");
+        sb.AppendLine("    break;");
+        sb.AppendLine("case System.Formats.Cbor.CborReaderState.NegativeInteger:");
+        sb.AppendLine("    writer.WriteInt64(reader.ReadInt64());");
+        sb.AppendLine("    break;");
+        sb.AppendLine("case System.Formats.Cbor.CborReaderState.HalfPrecisionFloat:");
+        sb.AppendLine("case System.Formats.Cbor.CborReaderState.SinglePrecisionFloat:");
+        sb.AppendLine("case System.Formats.Cbor.CborReaderState.DoublePrecisionFloat:");
+        sb.AppendLine("    writer.WriteDouble(reader.ReadDouble());");
+        sb.AppendLine("    break;");
+        sb.AppendLine("case System.Formats.Cbor.CborReaderState.TextString:");
+        sb.AppendLine("    writer.WriteTextString(reader.ReadTextString());");
+        sb.AppendLine("    break;");
+        sb.AppendLine("case System.Formats.Cbor.CborReaderState.ByteString:");
+        sb.AppendLine("    writer.WriteByteString(reader.ReadByteString());");
+        sb.AppendLine("    break;");
+        sb.AppendLine("case System.Formats.Cbor.CborReaderState.Boolean:");
+        sb.AppendLine("    writer.WriteBoolean(reader.ReadBoolean());");
+        sb.AppendLine("    break;");
+        sb.AppendLine("case System.Formats.Cbor.CborReaderState.Null:");
+        sb.AppendLine("    reader.ReadNull();");
+        sb.AppendLine("    writer.WriteNull();");
+        sb.AppendLine("    break;");
+        sb.AppendLine("case System.Formats.Cbor.CborReaderState.Tag:");
+        sb.AppendLine("    writer.WriteTag(reader.ReadTag());");
+        sb.AppendLine("    CopyValue(ref reader, ref writer);");
+        sb.AppendLine("    break;");
+        sb.AppendLine("case System.Formats.Cbor.CborReaderState.StartArray:");
+        sb.OpenBrace();
+        sb.AppendLine("writer.WriteStartArray(reader.ReadStartArray());");
+        sb.AppendLine("while (reader.PeekState() != System.Formats.Cbor.CborReaderState.EndArray)");
+        sb.OpenBrace();
+        sb.AppendLine("CopyValue(ref reader, ref writer);");
+        sb.CloseBrace();
+        sb.AppendLine("reader.ReadEndArray();");
+        sb.AppendLine("writer.WriteEndArray();");
+        sb.AppendLine("break;");
+        sb.CloseBrace();
+        sb.AppendLine("case System.Formats.Cbor.CborReaderState.StartMap:");
+        sb.OpenBrace();
+        sb.AppendLine("writer.WriteStartMap(reader.ReadStartMap());");
+        sb.AppendLine("while (reader.PeekState() != System.Formats.Cbor.CborReaderState.EndMap)");
+        sb.OpenBrace();
+        sb.AppendLine("CopyValue(ref reader, ref writer); // key");
+        sb.AppendLine("CopyValue(ref reader, ref writer); // value");
+        sb.CloseBrace();
+        sb.AppendLine("reader.ReadEndMap();");
+        sb.AppendLine("writer.WriteEndMap();");
+        sb.AppendLine("break;");
+        sb.CloseBrace();
+        sb.AppendLine("default:");
+        sb.AppendLine("    throw new System.InvalidOperationException($\"Unsupported CBOR state when copying an unknown union member: {reader.PeekState()}\");");
+        sb.CloseBrace();
+        sb.CloseBrace();
 
         sb.CloseBrace();
         sb.AppendLine();
@@ -270,7 +535,7 @@ public static class CborContextGenerator
             var interfaceShort = $"I{cleanParent}{cleanProp}";
             var interfaceQualified = string.IsNullOrEmpty(ns) ? interfaceShort : $"{ns}.{interfaceShort}";
             var interfaceSuffix = ToClassSuffix(interfaceQualified);
-            GenerateCborUnionTypeInfo(sb, interfaceQualified, interfaceSuffix, prop.Refs, currentNsid, registry, options, generatedTypes);
+            GenerateCborUnionTypeInfo(sb, interfaceQualified, interfaceSuffix, prop.Refs, currentNsid, registry, options, generatedTypes, dispatchInPlace: true, preserveUnknown: prop.Closed != true);
         }
 
         // Handle arrays
@@ -297,7 +562,7 @@ public static class CborContextGenerator
                 var interfaceShort = $"I{cleanParent}{cleanProp}";
                 var interfaceQualified = string.IsNullOrEmpty(ns) ? interfaceShort : $"{ns}.{interfaceShort}";
                 var interfaceSuffix = ToClassSuffix(interfaceQualified);
-                GenerateCborUnionTypeInfo(sb, interfaceQualified, interfaceSuffix, prop.Items.Refs, currentNsid, registry, options, generatedTypes);
+                GenerateCborUnionTypeInfo(sb, interfaceQualified, interfaceSuffix, prop.Items.Refs, currentNsid, registry, options, generatedTypes, dispatchInPlace: true, preserveUnknown: prop.Items.Closed != true);
             }
         }
     }

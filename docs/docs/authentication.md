@@ -42,3 +42,25 @@ if (client.TokenProvider is { } provider)
     };
 }
 ```
+
+## When a Session Ends
+
+Both `SessionTokenProvider` and the OAuth `DPoPTokenProvider` implement `INotifySessionInvalidated`.
+`SessionInvalidated` is raised once when the server rejects the refresh token (for example
+`ExpiredToken`, `InvalidToken` or `invalid_grant`). The provider drops its tokens first; delete any
+stored session and ask the user to sign in again. Network errors, 5xx responses and rate limits do
+not raise it.
+
+```csharp
+if (client.TokenProvider is INotifySessionInvalidated notifier)
+{
+    notifier.SessionInvalidated += (sender, args) =>
+    {
+        // args.Did, args.Reason
+        RemoveStoredSession(args.Did);
+    };
+}
+```
+
+`RefreshAsync` always refreshes, even when the current access token has not expired yet; concurrent
+callers share one refresh.

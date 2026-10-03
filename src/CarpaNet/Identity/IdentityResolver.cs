@@ -12,15 +12,24 @@ namespace CarpaNet.Identity;
 
 /// <summary>
 /// Resolves ATProtocol identities (handles and DIDs) to DID documents.
-/// Supports did:plc and did:web methods, and handle resolution via DNS TXT and HTTPS.
+/// Supports did:plc and did:web methods, and handle resolution via DNS TXT, HTTPS well-known,
+/// and (optionally) the <c>com.atproto.identity.resolveHandle</c> XRPC method.
 /// </summary>
+/// <remarks>
+/// Handle resolution methods are tried in the order set by
+/// <see cref="IdentityResolverOptions.HandleResolutionOrder"/> (default: DNS, well-known, XRPC).
+/// When no DNS resolver is given, <see cref="DnsResolverDefaults.CreateDefault"/> selects one for
+/// the platform (DNS-over-HTTPS in browsers, UDP elsewhere).
+/// </remarks>
 public sealed class IdentityResolver : IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly bool _ownsHttpClient;
     private readonly string _plcDirectoryUrl;
-    private readonly IDnsResolver? _dnsResolver;
+    private readonly IDnsResolver _dnsResolver;
     private readonly IIdentityCache? _cache;
+    private readonly HandleResolutionMethod[] _handleResolutionOrder;
+    private readonly XrpcHandleResolver? _xrpcHandleResolver;
     private readonly ILogger<IdentityResolver> _logger;
 
     /// <summary>
@@ -33,7 +42,7 @@ public sealed class IdentityResolver : IDisposable
     /// </summary>
     /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
     public IdentityResolver(ILoggerFactory? loggerFactory = null)
-        : this(new HttpClient(), ownsHttpClient: true, DefaultPlcDirectory, new DefaultDnsResolver(), null, loggerFactory)
+        : this(new HttpClient(), ownsHttpClient: true, new IdentityResolverOptions(), loggerFactory)
     {
     }
 
@@ -42,7 +51,7 @@ public sealed class IdentityResolver : IDisposable
     /// </summary>
     /// <param name="httpClient">The HttpClient to use for requests.</param>
     /// <param name="plcDirectoryUrl">The PLC directory URL (default: https://plc.directory).</param>
-    /// <param name="dnsResolver">Optional custom DNS resolver for handle resolution.</param>
+    /// <param name="dnsResolver">Optional custom DNS resolver for handle resolution. If null, <see cref="DnsResolverDefaults.CreateDefault"/> is used.</param>
     /// <param name="cache">Optional identity cache for caching resolved identities.</param>
     /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
     public IdentityResolver(
@@ -51,25 +60,68 @@ public sealed class IdentityResolver : IDisposable
         IDnsResolver? dnsResolver = null,
         IIdentityCache? cache = null,
         ILoggerFactory? loggerFactory = null)
-        : this(httpClient, ownsHttpClient: false, plcDirectoryUrl ?? DefaultPlcDirectory, dnsResolver, cache, loggerFactory)
+        : this(
+            httpClient,
+            ownsHttpClient: false,
+            new IdentityResolverOptions { PlcDirectoryUrl = plcDirectoryUrl, DnsResolver = dnsResolver, Cache = cache },
+            loggerFactory)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new IdentityResolver with the specified options.
+    /// </summary>
+    /// <param name="httpClient">The HttpClient to use for requests. It is not disposed by the resolver.</param>
+    /// <param name="options">The resolver options.</param>
+    /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
+    public IdentityResolver(HttpClient httpClient, IdentityResolverOptions options, ILoggerFactory? loggerFactory = null)
+        : this(httpClient, ownsHttpClient: false, options, loggerFactory)
     {
     }
 
     private IdentityResolver(
         HttpClient httpClient,
         bool ownsHttpClient,
-        string plcDirectoryUrl,
-        IDnsResolver? dnsResolver,
-        IIdentityCache? cache,
+        IdentityResolverOptions options,
         ILoggerFactory? loggerFactory)
     {
+        if (httpClient == null)
+            throw new ArgumentNullException(nameof(httpClient));
+        if (options == null)
+            throw new ArgumentNullException(nameof(options));
+
         _httpClient = httpClient;
         _ownsHttpClient = ownsHttpClient;
-        _plcDirectoryUrl = plcDirectoryUrl.TrimEnd('/');
-        _dnsResolver = dnsResolver;
-        _cache = cache;
+        _plcDirectoryUrl = (options.PlcDirectoryUrl ?? DefaultPlcDirectory).TrimEnd('/');
+        _dnsResolver = options.DnsResolver ?? DnsResolverDefaults.CreateDefault(httpClient);
+        _cache = options.Cache;
+
+        var order = options.HandleResolutionOrder;
+        if (order == null || order.Count == 0)
+            order = IdentityResolverOptions.DefaultHandleResolutionOrder;
+        var methods = new List<HandleResolutionMethod>();
+        foreach (var method in order)
+        {
+            if (!methods.Contains(method))
+                methods.Add(method);
+        }
+        _handleResolutionOrder = methods.ToArray();
+
+        if (!string.IsNullOrWhiteSpace(options.HandleResolutionServiceUrl))
+            _xrpcHandleResolver = new XrpcHandleResolver(httpClient, options.HandleResolutionServiceUrl!);
+
         _logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<IdentityResolver>();
     }
+
+    /// <summary>
+    /// Gets the DNS resolver used for <see cref="HandleResolutionMethod.Dns"/>.
+    /// </summary>
+    public IDnsResolver DnsResolver => _dnsResolver;
+
+    /// <summary>
+    /// Gets the handle resolution methods, in the order they are tried.
+    /// </summary>
+    public IReadOnlyList<HandleResolutionMethod> HandleResolutionOrder => _handleResolutionOrder;
 
     /// <summary>
     /// Gets the identity cache, if configured.
@@ -81,7 +133,7 @@ public sealed class IdentityResolver : IDisposable
     /// </summary>
     /// <param name="httpClient">Optional HttpClient to use for requests. If null, a new one will be created.</param>
     /// <param name="plcDirectoryUrl">The PLC directory URL (default: https://plc.directory).</param>
-    /// <param name="dnsResolver">Optional custom DNS resolver for handle resolution.</param>
+    /// <param name="dnsResolver">Optional custom DNS resolver for handle resolution. If null, <see cref="DnsResolverDefaults.CreateDefault"/> is used.</param>
     /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
     /// <returns>An IdentityResolver with caching enabled.</returns>
     public static IdentityResolver CreateWithCache(
@@ -99,7 +151,7 @@ public sealed class IdentityResolver : IDisposable
     /// <param name="cache">The identity cache to use.</param>
     /// <param name="httpClient">Optional HttpClient to use for requests. If null, a new one will be created.</param>
     /// <param name="plcDirectoryUrl">The PLC directory URL (default: https://plc.directory).</param>
-    /// <param name="dnsResolver">Optional custom DNS resolver for handle resolution.</param>
+    /// <param name="dnsResolver">Optional custom DNS resolver for handle resolution. If null, <see cref="DnsResolverDefaults.CreateDefault"/> is used.</param>
     /// <param name="loggerFactory">Optional logger factory for diagnostic logging.</param>
     /// <returns>An IdentityResolver with the specified cache.</returns>
     public static IdentityResolver CreateWithCache(
@@ -118,15 +170,19 @@ public sealed class IdentityResolver : IDisposable
         return new IdentityResolver(
             httpClient,
             ownsHttpClient,
-            plcDirectoryUrl ?? DefaultPlcDirectory,
-            dnsResolver ?? new DefaultDnsResolver(),
-            cache,
+            new IdentityResolverOptions { PlcDirectoryUrl = plcDirectoryUrl, DnsResolver = dnsResolver, Cache = cache },
             loggerFactory);
     }
 
     /// <summary>
     /// Resolves an identifier (handle or DID) to a DID document.
     /// </summary>
+    /// <remarks>
+    /// For a handle, the DID document's handle claim (<c>alsoKnownAs</c>) must match the handle,
+    /// or an <see cref="IdentityResolutionException"/> is thrown. This check runs for every
+    /// handle resolution method. When the DID came from <see cref="HandleResolutionMethod.Xrpc"/>,
+    /// the handle-to-DID direction is trusted from the service, not verified by DNS or well-known.
+    /// </remarks>
     /// <param name="identifier">A handle (e.g., "alice.bsky.social") or DID (e.g., "did:plc:...").</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The resolved DID document.</returns>
@@ -293,7 +349,8 @@ public sealed class IdentityResolver : IDisposable
     }
 
     /// <summary>
-    /// Resolves a handle to a DID using DNS TXT or HTTPS well-known methods.
+    /// Resolves a handle to a DID using the configured handle resolution methods
+    /// (by default DNS TXT, then HTTPS well-known, then XRPC if a service is configured).
     /// </summary>
     /// <param name="handle">The handle to resolve (e.g., "alice.bsky.social").</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -304,7 +361,8 @@ public sealed class IdentityResolver : IDisposable
     }
 
     /// <summary>
-    /// Resolves a handle to a DID using DNS TXT or HTTPS well-known methods.
+    /// Resolves a handle to a DID using the configured handle resolution methods
+    /// (by default DNS TXT, then HTTPS well-known, then XRPC if a service is configured).
     /// </summary>
     /// <param name="handle">The handle to resolve (e.g., "alice.bsky.social").</param>
     /// <param name="skipCache">If true, bypasses the cache and forces a fresh resolution.</param>
@@ -338,30 +396,28 @@ public sealed class IdentityResolver : IDisposable
             _logger.LogTrace("Cache miss for {Key}", handle);
         }
 
-        // Try DNS TXT first (preferred)
-        var dnsDid = await TryResolveHandleDnsAsync(handle, cancellationToken).ConfigureAwait(false);
-        if (!string.IsNullOrEmpty(dnsDid))
+        foreach (var method in _handleResolutionOrder)
         {
-            _logger.LogDebug("DNS resolution found {Did} for {Handle}", dnsDid, handle);
-            // Cache the result
-            if (_cache != null)
+            var did = method switch
             {
-                await _cache.SetHandleDidAsync(handle, dnsDid!, cancellationToken).ConfigureAwait(false);
-            }
-            return dnsDid!;
-        }
+                HandleResolutionMethod.Dns => await TryResolveHandleDnsAsync(handle, cancellationToken).ConfigureAwait(false),
+                HandleResolutionMethod.WellKnown => await TryResolveHandleHttpsAsync(handle, cancellationToken).ConfigureAwait(false),
+                HandleResolutionMethod.Xrpc => await TryResolveHandleXrpcAsync(handle, cancellationToken).ConfigureAwait(false),
+                _ => null
+            };
 
-        // Fall back to HTTPS well-known
-        var httpsDid = await TryResolveHandleHttpsAsync(handle, cancellationToken).ConfigureAwait(false);
-        if (!string.IsNullOrEmpty(httpsDid))
-        {
-            _logger.LogDebug("HTTPS resolution found {Did} for {Handle}", httpsDid, handle);
+            if (string.IsNullOrEmpty(did))
+                continue;
+
+            _logger.LogDebug("{Method} resolution found {Did} for {Handle}", method, did, handle);
+
             // Cache the result
             if (_cache != null)
             {
-                await _cache.SetHandleDidAsync(handle, httpsDid!, cancellationToken).ConfigureAwait(false);
+                await _cache.SetHandleDidAsync(handle, did!, cancellationToken).ConfigureAwait(false);
             }
-            return httpsDid!;
+
+            return did!;
         }
 
         _logger.LogError("Failed to resolve handle {Handle}", handle);
@@ -373,9 +429,6 @@ public sealed class IdentityResolver : IDisposable
     /// </summary>
     private async Task<string?> TryResolveHandleDnsAsync(string handle, CancellationToken cancellationToken)
     {
-        if (_dnsResolver == null)
-            return null; // DNS resolution not available
-
         try
         {
             var txtRecordName = $"_atproto.{handle}";
@@ -392,9 +445,10 @@ public sealed class IdentityResolver : IDisposable
                 }
             }
         }
-        catch
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
-            // DNS resolution failed, will try HTTPS
+            // DNS resolution failed, will try the next method
+            _logger.LogDebug(ex, "DNS resolution failed for {Handle}", handle);
         }
 
         return null;
@@ -419,9 +473,31 @@ public sealed class IdentityResolver : IDisposable
             if (did.StartsWith("did:", StringComparison.OrdinalIgnoreCase))
                 return did;
         }
-        catch
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
-            // HTTPS resolution failed
+            // HTTPS resolution failed, will try the next method
+            _logger.LogDebug(ex, "Well-known resolution failed for {Handle}", handle);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Tries to resolve a handle via the configured XRPC service.
+    /// The result is trusted from the service, not verified against DNS or well-known.
+    /// </summary>
+    private async Task<string?> TryResolveHandleXrpcAsync(string handle, CancellationToken cancellationToken)
+    {
+        if (_xrpcHandleResolver == null)
+            return null; // No service configured
+
+        try
+        {
+            return await _xrpcHandleResolver.ResolveHandleAsync(handle, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug(ex, "XRPC resolution via {Service} failed for {Handle}", _xrpcHandleResolver.ServiceUrl, handle);
         }
 
         return null;

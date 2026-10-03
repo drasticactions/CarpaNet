@@ -79,50 +79,118 @@ public sealed class RateLimitHandler : DelegatingHandler
         CancellationToken cancellationToken)
     {
         var attempt = 0;
-        HttpResponseMessage? response = null;
+        HttpRequestMessage? retryRequest = null;
 
-        while (true)
+        try
         {
-            attempt++;
-
-            // Clone request for retry (requests can only be sent once)
-            using var requestClone = attempt > 1 ? await CloneRequestAsync(request).ConfigureAwait(false) : null;
-            var requestToSend = requestClone ?? request;
-
-            response = await base.SendAsync(requestToSend, cancellationToken).ConfigureAwait(false);
-
-            // Check for rate limit
-            if (response.StatusCode != (HttpStatusCode)429)
+            while (true)
             {
-                return response;
+                attempt++;
+
+                var response = await base.SendAsync(retryRequest ?? request, cancellationToken).ConfigureAwait(false);
+
+                // Check for rate limit
+                if (response.StatusCode != (HttpStatusCode)429)
+                {
+                    return response;
+                }
+
+                // Parse rate limit info
+                var rateLimitInfo = RateLimitInfo.FromResponse(response);
+
+                // Raise event
+                RateLimitEncountered?.Invoke(this, new RateLimitEventArgs(rateLimitInfo, attempt));
+
+                // Check if we should retry
+                if (!AutoRetryOnRateLimit || attempt >= MaxRetries)
+                {
+                    _logger.LogWarning("Rate limit max retries exceeded");
+                    return response;
+                }
+
+                // A DPoP proof is single use: a signed request can only be retried when the sender
+                // supplied a callback that signs the copy again.
+                var prepareRetry = GetRetryPreparer(request);
+                if (prepareRetry == null && request.Headers.Contains("DPoP"))
+                {
+                    _logger.LogWarning("Rate limited (429) on a DPoP-signed request without a retry preparer; not retrying");
+                    return response;
+                }
+
+                // Clone the request for the retry (requests can only be sent once). A body that
+                // cannot be read again (a consumed, non-seekable stream) cannot be retried.
+                HttpRequestMessage nextRequest;
+                try
+                {
+                    nextRequest = await CloneRequestAsync(request).ConfigureAwait(false);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    _logger.LogWarning(ex, "Rate limited (429) but the request body cannot be replayed; not retrying");
+                    return response;
+                }
+
+                if (prepareRetry != null)
+                {
+                    await prepareRetry(nextRequest).ConfigureAwait(false);
+                }
+
+                retryRequest?.Dispose();
+                retryRequest = nextRequest;
+
+                _logger.LogWarning("Rate limited (429) on attempt {Attempt}/{MaxRetries}", attempt, MaxRetries);
+
+                // Calculate delay
+                var delay = CalculateDelay(rateLimitInfo, attempt);
+                _logger.LogDebug("Rate limit retry after {DelayMs}ms", (int)delay.TotalMilliseconds);
+
+                // Dispose the response before retrying
+                response.Dispose();
+
+                // Wait before retrying
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             }
-
-            // Parse rate limit info
-            var rateLimitInfo = RateLimitInfo.FromResponse(response);
-
-            // Raise event
-            RateLimitEncountered?.Invoke(this, new RateLimitEventArgs(rateLimitInfo, attempt));
-
-            // Check if we should retry
-            if (!AutoRetryOnRateLimit || attempt >= MaxRetries)
-            {
-                _logger.LogWarning("Rate limit max retries exceeded");
-                return response;
-            }
-
-            _logger.LogWarning("Rate limited (429) on attempt {Attempt}/{MaxRetries}", attempt, MaxRetries);
-
-            // Calculate delay
-            var delay = CalculateDelay(rateLimitInfo, attempt);
-            _logger.LogDebug("Rate limit retry after {DelayMs}ms", (int)delay.TotalMilliseconds);
-
-            // Dispose the response before retrying
-            response.Dispose();
-
-            // Wait before retrying
-            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            retryRequest?.Dispose();
         }
     }
+
+    /// <summary>
+    /// Attaches a callback that updates the copy of <paramref name="request"/> made for each
+    /// rate-limit retry, before it is sent. Use it for single-use credentials such as DPoP proofs.
+    /// </summary>
+    /// <param name="request">The original request.</param>
+    /// <param name="prepareRetry">Receives the copy to update.</param>
+    public static void SetRetryPreparer(HttpRequestMessage request, Func<HttpRequestMessage, Task> prepareRetry)
+    {
+        if (request == null)
+            throw new ArgumentNullException(nameof(request));
+        if (prepareRetry == null)
+            throw new ArgumentNullException(nameof(prepareRetry));
+
+#if NET5_0_OR_GREATER
+        request.Options.Set(RetryPreparerKey, prepareRetry);
+#else
+        request.Properties[RetryPreparerName] = prepareRetry;
+#endif
+    }
+
+    private static Func<HttpRequestMessage, Task>? GetRetryPreparer(HttpRequestMessage request)
+    {
+#if NET5_0_OR_GREATER
+        return request.Options.TryGetValue(RetryPreparerKey, out var prepareRetry) ? prepareRetry : null;
+#else
+        return request.Properties.TryGetValue(RetryPreparerName, out var value) ? value as Func<HttpRequestMessage, Task> : null;
+#endif
+    }
+
+    private const string RetryPreparerName = "CarpaNet.RateLimitHandler.PrepareRetry";
+
+#if NET5_0_OR_GREATER
+    private static readonly HttpRequestOptionsKey<Func<HttpRequestMessage, Task>> RetryPreparerKey = new(RetryPreparerName);
+#endif
 
     private TimeSpan CalculateDelay(RateLimitInfo? rateLimitInfo, int attempt)
     {

@@ -60,6 +60,45 @@ public static class HttpClientFactory
         HttpMessageHandler handler;
 
 #if NET5_0_OR_GREATER
+        if (OperatingSystem.IsBrowser())
+        {
+            // The browser fetch handler supports neither SocketsHttpHandler nor the
+            // HttpClientHandler connection settings, so it is used as is.
+            handler = new HttpClientHandler();
+        }
+        else
+        {
+            handler = CreateSocketsHandler(options);
+        }
+#else
+        // Fallback for older frameworks
+        var httpHandler = new HttpClientHandler
+        {
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+            UseCookies = options.UseCookies,
+            MaxConnectionsPerServer = options.MaxConnectionsPerServer ?? 10
+        };
+
+        handler = httpHandler;
+#endif
+
+        // Add rate limit handler if enabled
+        if (options.EnableRateLimitHandler)
+        {
+            var rateLimitHandler = new RateLimitHandler(handler, loggerFactory: options.LoggerFactory)
+            {
+                AutoRetryOnRateLimit = options.AutoRetryOnRateLimit,
+                MaxRetries = options.RateLimitMaxRetries
+            };
+            handler = rateLimitHandler;
+        }
+
+        return handler;
+    }
+
+#if NET5_0_OR_GREATER
+    private static SocketsHttpHandler CreateSocketsHandler(HttpClientFactoryOptions options)
+    {
         // Use SocketsHttpHandler for best performance
         var socketsHandler = new SocketsHttpHandler
         {
@@ -87,32 +126,9 @@ public static class HttpClientFactory
             socketsHandler.EnableMultipleHttp2Connections = true;
         }
 
-        handler = socketsHandler;
-#else
-        // Fallback for older frameworks
-        var httpHandler = new HttpClientHandler
-        {
-            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
-            UseCookies = options.UseCookies,
-            MaxConnectionsPerServer = options.MaxConnectionsPerServer ?? 10
-        };
-
-        handler = httpHandler;
-#endif
-
-        // Add rate limit handler if enabled
-        if (options.EnableRateLimitHandler)
-        {
-            var rateLimitHandler = new RateLimitHandler(handler, loggerFactory: options.LoggerFactory)
-            {
-                AutoRetryOnRateLimit = options.AutoRetryOnRateLimit,
-                MaxRetries = options.RateLimitMaxRetries
-            };
-            handler = rateLimitHandler;
-        }
-
-        return handler;
+        return socketsHandler;
     }
+#endif
 }
 
 /// <summary>

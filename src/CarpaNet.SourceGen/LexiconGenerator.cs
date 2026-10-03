@@ -83,25 +83,27 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         {
             var options = new GeneratorOptions();
 
-            if (provider.GlobalOptions.TryGetValue("build_property.CarpaNet_RootNamespace", out var rootNs)
+            var globalOptions = provider.GlobalOptions;
+
+            if (TryGetBuildProperty(globalOptions, "RootNamespace", out var rootNs)
                 && !string.IsNullOrWhiteSpace(rootNs))
             {
                 options.RootNamespace = rootNs;
             }
 
-            if (provider.GlobalOptions.TryGetValue("build_property.CarpaNet_EmitValidationAttributes", out var emitValidation)
+            if (TryGetBuildProperty(globalOptions, "EmitValidationAttributes", out var emitValidation)
                 && bool.TryParse(emitValidation, out var emitValidationValue))
             {
                 options.EmitValidationAttributes = emitValidationValue;
             }
 
-            if (provider.GlobalOptions.TryGetValue("build_property.CarpaNet_CborContextName", out var cborContextName)
+            if (TryGetBuildProperty(globalOptions, "CborContextName", out var cborContextName)
                 && !string.IsNullOrWhiteSpace(cborContextName))
             {
                 options.CborContextName = cborContextName;
             }
 
-            if (provider.GlobalOptions.TryGetValue("build_property.CarpaNet_JsonContextName", out var jsonContextName)
+            if (TryGetBuildProperty(globalOptions, "JsonContextName", out var jsonContextName)
                 && !string.IsNullOrWhiteSpace(jsonContextName))
             {
                 options.JsonContextName = jsonContextName;
@@ -121,6 +123,34 @@ public sealed class LexiconGenerator : IIncrementalGenerator
 
         // Register source output
         context.RegisterSourceOutput(combined, static (ctx, data) => GenerateSource(ctx, data.Left, data.Right));
+    }
+
+    /// <summary>
+    /// Reads a generator MSBuild property, preferring the current <c>CarpaNet_{name}</c> spelling and
+    /// falling back to the legacy <c>CarpaNet_SourceGen_{name}</c> spelling for backward compatibility.
+    /// Empty values are treated as unset so that a blank current property does not hide a legacy one.
+    /// </summary>
+    private static bool TryGetBuildProperty(
+        Microsoft.CodeAnalysis.Diagnostics.AnalyzerConfigOptions globalOptions,
+        string name,
+        out string value)
+    {
+        if (globalOptions.TryGetValue($"build_property.CarpaNet_{name}", out var current)
+            && !string.IsNullOrWhiteSpace(current))
+        {
+            value = current;
+            return true;
+        }
+
+        if (globalOptions.TryGetValue($"build_property.CarpaNet_SourceGen_{name}", out var legacy)
+            && !string.IsNullOrWhiteSpace(legacy))
+        {
+            value = legacy;
+            return true;
+        }
+
+        value = string.Empty;
+        return false;
     }
 
     private static void GenerateSource(
@@ -283,7 +313,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         {
             try
             {
-                GenerateDefinitions(sb, nsid, doc, ns, registry, context);
+                GenerateDefinitions(sb, nsid, doc, ns, registry, context, options);
             }
             catch (Exception ex)
             {
@@ -310,8 +340,11 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         LexiconDocument doc,
         string currentNamespace,
         TypeRegistry registry,
-        SourceProductionContext context)
+        SourceProductionContext context,
+        GeneratorOptions options)
     {
+        var emitValidation = options.EmitValidationAttributes;
+
         foreach (var def in doc.Defs)
         {
             var defName = def.Key;
@@ -326,24 +359,24 @@ public sealed class LexiconGenerator : IIncrementalGenerator
             switch (defValue.Type)
             {
                 case "record":
-                    GenerateRecordType(sb, className, defValue, nsid, registry);
+                    GenerateRecordType(sb, className, defValue, nsid, registry, emitValidation);
                     break;
 
                 case "query":
-                    GenerateQueryType(sb, className, defValue, nsid, currentNamespace, registry);
+                    GenerateQueryType(sb, className, defValue, nsid, currentNamespace, registry, emitValidation);
                     break;
 
                 case "procedure":
-                    GenerateProcedureType(sb, className, defValue, nsid, currentNamespace, registry);
+                    GenerateProcedureType(sb, className, defValue, nsid, currentNamespace, registry, emitValidation);
                     break;
 
                 case "subscription":
-                    GenerateSubscriptionType(sb, className, defValue, nsid, currentNamespace, registry);
+                    GenerateSubscriptionType(sb, className, defValue, nsid, currentNamespace, registry, emitValidation);
                     break;
 
                 case "object":
                     var objectTypeId = defName == "main" ? nsid : $"{nsid}#{defName}";
-                    ObjectGenerator.GenerateClass(sb, className, defValue, nsid, registry, typeId: objectTypeId);
+                    ObjectGenerator.GenerateClass(sb, className, defValue, nsid, registry, typeId: objectTypeId, emitValidationAttributes: emitValidation);
                     sb.AppendLine();
                     break;
 
@@ -377,7 +410,8 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         string className,
         LexiconDefinition def,
         string nsid,
-        TypeRegistry registry)
+        TypeRegistry registry,
+        bool emitValidation)
     {
         if (def.Record == null)
         {
@@ -392,7 +426,8 @@ public sealed class LexiconGenerator : IIncrementalGenerator
             registry,
             isRecord: true,
             recordType: nsid,
-            typeId: nsid);
+            typeId: nsid,
+            emitValidationAttributes: emitValidation);
 
         sb.AppendLine();
     }
@@ -403,19 +438,20 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         LexiconDefinition def,
         string nsid,
         string currentNamespace,
-        TypeRegistry registry)
+        TypeRegistry registry,
+        bool emitValidation)
     {
         // Generate parameters class if needed
         if (def.Parameters?.Properties != null && def.Parameters.Properties.Count > 0)
         {
-            ApiGenerator.GenerateParametersClass(sb, className, def, nsid, registry);
+            ApiGenerator.GenerateParametersClass(sb, className, def, nsid, registry, emitValidation);
             sb.AppendLine();
         }
 
         // Generate output class (skip if schema is a direct ref — the referenced type already exists)
         if (def.Output?.Schema != null && !ApiGenerator.IsOutputRef(def))
         {
-            ApiGenerator.GenerateOutputClass(sb, className, def.Output, nsid, registry);
+            ApiGenerator.GenerateOutputClass(sb, className, def.Output, nsid, registry, emitValidation);
             sb.AppendLine();
         }
 
@@ -433,19 +469,27 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         LexiconDefinition def,
         string nsid,
         string currentNamespace,
-        TypeRegistry registry)
+        TypeRegistry registry,
+        bool emitValidation)
     {
+        // Generate parameters class if needed (procedures may take query parameters, e.g. app.bsky.video.uploadPart)
+        if (def.Parameters?.Properties != null && def.Parameters.Properties.Count > 0)
+        {
+            ApiGenerator.GenerateParametersClass(sb, className, def, nsid, registry, emitValidation);
+            sb.AppendLine();
+        }
+
         // Generate input class (skip if schema is a direct ref — the referenced type already exists)
         if (def.Input?.Schema != null && !ApiGenerator.IsInputRef(def))
         {
-            ApiGenerator.GenerateInputClass(sb, className, def.Input, nsid, registry);
+            ApiGenerator.GenerateInputClass(sb, className, def.Input, nsid, registry, emitValidation);
             sb.AppendLine();
         }
 
         // Generate output class (skip if schema is a direct ref — the referenced type already exists)
         if (def.Output?.Schema != null && !ApiGenerator.IsOutputRef(def))
         {
-            ApiGenerator.GenerateOutputClass(sb, className, def.Output, nsid, registry);
+            ApiGenerator.GenerateOutputClass(sb, className, def.Output, nsid, registry, emitValidation);
             sb.AppendLine();
         }
 
@@ -463,12 +507,13 @@ public sealed class LexiconGenerator : IIncrementalGenerator
         LexiconDefinition def,
         string nsid,
         string currentNamespace,
-        TypeRegistry registry)
+        TypeRegistry registry,
+        bool emitValidation)
     {
         // Generate parameters class if needed
         if (def.Parameters?.Properties != null && def.Parameters.Properties.Count > 0)
         {
-            ApiGenerator.GenerateParametersClass(sb, className, def, nsid, registry);
+            ApiGenerator.GenerateParametersClass(sb, className, def, nsid, registry, emitValidation);
             sb.AppendLine();
         }
 
@@ -629,7 +674,7 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                                 var interfaceName = $"I{className}";
                                 var fullName = $"{ns}.{interfaceName}";
                                 var suffix = CborContextGenerator.ToClassSuffix(fullName);
-                                CborContextGenerator.GenerateCborUnionTypeInfo(sb, fullName, suffix, defValue.Refs, nsid, registry, options, generatedTypes);
+                                CborContextGenerator.GenerateCborUnionTypeInfo(sb, fullName, suffix, defValue.Refs, nsid, registry, options, generatedTypes, dispatchInPlace: true, preserveUnknown: defValue.Closed != true);
                                 typesToRegister.Add((suffix, fullName, null));
                             }
                             break;
@@ -690,13 +735,19 @@ public sealed class LexiconGenerator : IIncrementalGenerator
                                 var interfaceName = $"I{className}";
                                 var fullName = $"{ns}.{interfaceName}";
                                 var suffix = CborContextGenerator.ToClassSuffix(fullName);
-                                CborContextGenerator.GenerateCborUnionTypeInfo(sb, fullName, suffix, defValue.Items.Refs, nsid, registry, options, generatedTypes);
+                                CborContextGenerator.GenerateCborUnionTypeInfo(sb, fullName, suffix, defValue.Items.Refs, nsid, registry, options, generatedTypes, dispatchInPlace: true, preserveUnknown: defValue.Items.Closed != true);
                                 typesToRegister.Add((suffix, fullName, null));
                             }
                             break;
                     }
                 }
             }
+        }
+
+        // Shared helper for union type infos that read in place / preserve unknown members
+        if (generatedTypes.Contains(CborContextGenerator.UnionHelperMarker))
+        {
+            CborContextGenerator.GenerateUnionHelper(sb);
         }
 
         // Generate the context class
