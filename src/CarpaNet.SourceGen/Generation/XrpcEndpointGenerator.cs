@@ -232,7 +232,10 @@ public static class XrpcEndpointGenerator
         {
             var requiredProps = def.Parameters.Required ?? new List<string>();
 
-            foreach (var prop in def.Parameters.Properties)
+            var mandatoryProperties = def.Parameters.Properties.Where(x => requiredProps.Contains(x.Key));
+            var optionalProperties = def.Parameters.Properties.Where(x => !requiredProps.Contains(x.Key));
+
+            foreach (var prop in mandatoryProperties.Concat(optionalProperties))
             {
                 var isRequired = requiredProps.Contains(prop.Key);
                 var csharpType = ResolveParameterType(prop.Value, currentNsid, registry);
